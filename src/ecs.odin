@@ -1,13 +1,13 @@
 package nod
 
-Entity_ID :: distinct u64
+EntityID :: distinct u64
 MAX_ENTITIES :: 10_000
 
 World :: struct {
 	// entities
-	entities:          [MAX_ENTITIES]Entity_ID,
+	entities:          [MAX_ENTITIES]EntityID,
 	entity_count:      int,
-	next_entity_id:    Entity_ID,
+	next_entity_id:    EntityID,
 
 	// components
 	core:              Core,

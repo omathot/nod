@@ -17,10 +17,12 @@ Nod :: struct {
 	prev_time:         f64,
 	delta_time:        f64,
 	next_tick:         f64,
+	// systems
+	physics_world:     PhysicsWorld,
+
 	// asset_manager: AssetManager
 	// audio_system: AudioSystem,
 	// scene_manager: SceneManager,
-	// physics_world: PhysicsWorld,
 	config:            NodConfig,
 
 	// user's game
@@ -71,6 +73,7 @@ nod_init :: proc(config: NodConfig) -> (^Nod, NodError) {
 	nod.is_running = false
 	nod.window = window
 	nod.renderer = renderer
+	physics_init_world(&nod.physics_world)
 	// nod.input_state := InputState
 
 	return nod, .None

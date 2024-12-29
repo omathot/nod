@@ -24,11 +24,14 @@ MouseState :: struct {
 update_input :: proc(input: ^InputState) {
 	// Create a new fresh KeyboardState for current frame
 	new_keyboard: KeyboardState
+	new_mouse: MouseState
 
 	// Store the current state as previous before updating
 	input.prev_keyboard = input.keyboard
+	input.prev_mouse = input.mouse
 	// Reset current state to the fresh one
 	input.keyboard = new_keyboard
+	input.mouse = new_mouse
 
 	event: sdl.Event
 	for sdl.PollEvent(&event) {
@@ -199,7 +202,6 @@ update_keyboard_state :: proc(keyboard: ^KeyboardState) {
 
 update_mouse_state :: proc(mouse: ^MouseState) {
 	x, y: i32
-	mouse.buttons = {}
 	mouse_button := sdl.GetMouseState(&x, &y)
 
 	mouse.position = {f64(x), f64(y)}
