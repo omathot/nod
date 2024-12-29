@@ -205,6 +205,11 @@ add_circle_collider :: proc(
 
 
 // Movement n Forces
+set_gravity :: proc(nod: ^Nod, gravity: Vec2) {
+	nod.physics_world.gravity = gravity
+	b2.World_SetGravity(nod.physics_world.handle, {f32(gravity.x), f32(gravity.y)})
+}
+
 set_position :: proc(nod: ^Nod, entity_id: EntityID, position: Vec2) {
 	if body, ok := &nod.physics_world.bodies[entity_id]; ok {
 		b2.Body_SetTransform(
@@ -236,6 +241,12 @@ apply_force :: proc(nod: ^Nod, entity_id: EntityID, impulse: Vec2, world_point: 
 			{f32(world_point.x), f32(world_point.y)},
 			true, // b2 puts bodies to sleep after a while, so they're not simulated
 		)
+	}
+}
+
+set_body_awake :: proc(nod: ^Nod, entity_id: EntityID) {
+	if body, ok := nod.physics_world.bodies[entity_id]; ok {
+		b2.Body_SetAwake(body.handle, true)
 	}
 }
 
@@ -292,6 +303,20 @@ get_hits :: proc(nod: ^Nod, entity_id: EntityID, allocator := context.allocator)
 		}
 	}
 	return hits[:]
+}
+
+get_body_mass :: proc(nod: ^Nod, entity_id: EntityID) -> f32 {
+	if body, ok := nod.physics_world.bodies[entity_id]; ok {
+		return b2.Body_GetMass(body.handle)
+	}
+	return 0
+}
+
+is_body_awake :: proc(nod: ^Nod, entity_id: EntityID) -> bool {
+	if body, ok := nod.physics_world.bodies[entity_id]; ok {
+		return b2.Body_IsAwake(body.handle)
+	}
+	return false
 }
 
 // JOINTS
