@@ -1,0 +1,6 @@
+{
+  "collections": [
+    { "name": "lib", "path": "./lib/" }
+    { "name": "nod", "path": "./src/" }
+  ]
+}
