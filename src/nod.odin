@@ -85,7 +85,7 @@ nod_clean :: proc(nod: ^Nod) {
 			sdl.DestroyRenderer(nod.renderer.handle)
 		}
 		if nod.game != nil {
-			// not allocated, to add if game gets allocated
+			// not allocated rn its just tests, probably add for real games
 			// free(nod.game)
 		}
 
@@ -115,11 +115,11 @@ nod_run :: proc(nod: ^Nod) {
 		loops := 0
 
 		for nod.current_time > nod.next_tick && loops < MAX_FRAMESKIP {
-			fixed_update(nod) // physics
+			fixed_update(nod) // physics/game_logic
 			nod.next_tick += SKIP_TICKS
 			loops += 1
 		}
-		variable_update(nod) // ui, particle effects, cameras
+		variable_update(nod) // inputs, ui, particle effects, cameras
 
 		interpolation := f64(nod.current_time + SKIP_TICKS - nod.next_tick) / f64(SKIP_TICKS)
 		interpolation = clamp(interpolation, 0, 1)
@@ -139,8 +139,9 @@ render :: proc(nod: ^Nod, interpolation: f32) {
 }
 
 fixed_update :: proc(nod: ^Nod) {
+	// quit event check
 	if nod.input_state.quit_request ||
-	   (nod.should_quit != nil && nod.game != nil && nod.should_quit(&nod.game)) {
+	   (nod.should_quit != nil && nod.game != nil && nod.should_quit(nod.game)) {
 		fmt.println("received quit event")
 		nod.is_running = false
 		return
@@ -164,15 +165,15 @@ draw_sprite :: proc(renderer: ^Renderer, texture: ^sdl.Texture, src, dest: Rect)
 }
 
 // Separate from fixed_update, this runs every frame:
+// Things that can run at variable timestep:
+// - Particle effects
+// - UI animations
+// - Camera smoothing
+// - Visual effects
 variable_update :: proc(nod: ^Nod) {
 	if nod.frame_update_game != nil && nod.game != nil {
-		nod.frame_update_game(&nod.game, &nod.input_state)
+		nod.frame_update_game(nod.game, &nod.input_state)
 	}
-	// Things that can run at variable timestep:
-	// - Particle effects
-	// - UI animations
-	// - Camera smoothing
-	// - Visual effects
 }
 
 // physics_update :: proc(nod: ^nod) {
