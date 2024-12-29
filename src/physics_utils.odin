@@ -5,14 +5,21 @@ import b2 "vendor:box2d"
 ShapeID :: distinct u64
 
 PhysicsBody :: struct {
-	handle:         b2.BodyId,
-	type:           PhysicsBodyType,
-	entity_id:      EntityID,
-	shapes:         [dynamic]ShapeID,
+	handle:          b2.BodyId,
+	type:            PhysicsBodyType,
+	entity_id:       EntityID,
+	shapes:          [dynamic]ShapeID,
 
 	// cache
-	prev_transform: Transform,
-	transform:      Transform,
+	prev_transform:  Transform,
+	transform:       Transform,
+
+	// filter
+	collision_layer: u32,
+	collision_mask:  u32,
+
+	// area
+	is_sensor:       bool,
 }
 
 PhysicsJoint :: struct {

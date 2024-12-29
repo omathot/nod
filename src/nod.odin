@@ -1,28 +1,41 @@
 package nod
 
+import "core:container/queue"
 import "core:fmt"
+import "core:sync"
+import "core:thread"
 import sdl "vendor:sdl2"
 
+
 TICKS_PER_SECOND :: 25
-SKIP_TICKS :: 1000 / TICKS_PER_SECOND
 MAX_FRAMESKIP :: 5 // sqrt(TICKS_PER_SECOND)
 
 Nod :: struct {
 	window:            Window,
 	renderer:          Renderer,
+
+	// core
 	input_state:       InputState,
 	is_running:        bool,
+	physics_world:     PhysicsWorld,
+	// asset_manager: AssetManager
+	// audio_system: AudioSystem,
+	// scene_manager: SceneManager,
+
+	// threading
+	physics_thread:    ^thread.Thread,
+	render_thread:     ^thread.Thread,
+
+	// state n sync
+	state_buffer:      StateBuffer,
+	command_queue:     CommandQueue,
+	frame_complete:    sync.Sema,
+	physics_complete:  sync.Sema,
+
 	//time
 	current_time:      f64,
 	prev_time:         f64,
 	delta_time:        f64,
-	next_tick:         f64,
-	// systems
-	physics_world:     PhysicsWorld,
-
-	// asset_manager: AssetManager
-	// audio_system: AudioSystem,
-	// scene_manager: SceneManager,
 	config:            NodConfig,
 
 	// user's game
@@ -33,20 +46,41 @@ Nod :: struct {
 	should_quit:       proc(_: rawptr) -> bool,
 }
 
-NodConfig :: struct {
-	window_title:  string,
-	window_width:  int,
-	window_height: int,
-	target_fps:    int,
-	vsync:         bool,
+StateBuffer :: struct {
+	states:      [3]GameState,
+	read_index:  int,
+	write_index: int,
+	mutex:       sync.Mutex,
 }
 
-NodError :: enum {
-	None,
-	FailedToInitSdl,
-	FailedToCreateWindow,
-	FailedToCreateRenderer,
+CommandQueue :: struct {
+	commands: queue.Queue(Command),
+	mutex:    sync.Mutex,
+	sem:      sync.Sema,
 }
+
+GameState :: struct {
+	transform: Transform,
+	physics:   PhysicsState,
+	input:     InputState,
+	// animation: AnimationState
+	// particles: ParticleState
+}
+
+Command :: struct {
+	type: CommandType,
+	data: rawptr,
+}
+
+CommandType :: enum {
+	Quit,
+	UpdatePhysics,
+	UpdateRender,
+	UpdateInput,
+	// UpdateAnimation,
+	// UpdateParticle
+}
+
 
 nod_init :: proc(config: NodConfig) -> (^Nod, NodError) {
 	nod := new(Nod)
@@ -100,32 +134,42 @@ nod_clean :: proc(nod: ^Nod) {
 }
 
 nod_run :: proc(nod: ^Nod) {
+	performance_frequency := f64(sdl.GetPerformanceFrequency())
+	prev_counter := f64(sdl.GetPerformanceCounter())
+	accumulator := f64(0)
 	nod.is_running = true
-	nod.current_time = f64(sdl.GetTicks())
-	nod.next_tick = nod.current_time
+
+	FIXED_DT := 1.0 / f64(TICKS_PER_SECOND) // 0.04 for 25 TPS
+
 
 	for nod.is_running {
-		// fmt.println("looping")
+		current_counter := f64(sdl.GetPerformanceCounter())
+		frame_time := f64(current_counter - prev_counter) / performance_frequency
+		prev_counter = current_counter
+
+		if frame_time > 0.250 {
+			frame_time = 0.25
+		}
+
+		nod.prev_time = nod.current_time
+		nod.current_time += frame_time
+		nod.delta_time = frame_time
+
 		update_input(&nod.input_state)
 		if nod.input_state.quit_request {
 			nod.is_running = false
 		}
-		// cache time info
-		nod.prev_time = nod.current_time
-		nod.current_time = f64(sdl.GetTicks())
-		nod.delta_time = (nod.current_time - nod.prev_time) / 1000.0 // seconds
 
+		accumulator += frame_time
 		loops := 0
-
-		for nod.current_time > nod.next_tick && loops < MAX_FRAMESKIP {
-			fixed_update(nod) // physics/game_logic
-			nod.next_tick += SKIP_TICKS
+		for accumulator > FIXED_DT && loops < MAX_FRAMESKIP {
+			fixed_update(nod)
+			accumulator -= FIXED_DT
 			loops += 1
 		}
-		variable_update(nod) // inputs, ui, particle effects, cameras
+		variable_update(nod)
 
-		interpolation := f64(nod.current_time + SKIP_TICKS - nod.next_tick) / f64(SKIP_TICKS)
-		interpolation = clamp(interpolation, 0, 1)
+		interpolation := clamp(accumulator / FIXED_DT, 0, 1)
 		render(nod, f32(interpolation))
 	}
 }
@@ -158,15 +202,6 @@ fixed_update :: proc(nod: ^Nod) {
 	}
 }
 
-draw_sprite :: proc(renderer: ^Renderer, texture: ^sdl.Texture, src, dest: Rect) {
-	sdl.RenderCopy(
-		renderer.handle,
-		texture,
-		&sdl.Rect{i32(src.x), i32(src.y), i32(src.w), i32(src.h)},
-		&sdl.Rect{i32(dest.x), i32(dest.y), i32(dest.w), i32(dest.h)},
-	)
-}
-
 // Separate from fixed_update, this runs every frame:
 // Things that can run at variable timestep:
 // - Particle effects
@@ -179,17 +214,28 @@ variable_update :: proc(nod: ^Nod) {
 	}
 }
 
-// physics_update :: proc(nod: ^nod) {
-// 	// Physics timestep is constant (40ms at 25 TPS)
-// 	physics_dt := 1.0 / f32(TICKS_PER_SECOND)
+draw_sprite :: proc(renderer: ^Renderer, texture: ^sdl.Texture, src, dest: Rect) {
+	sdl.RenderCopy(
+		renderer.handle,
+		texture,
+		&sdl.Rect{i32(src.x), i32(src.y), i32(src.w), i32(src.h)},
+		&sdl.Rect{i32(dest.x), i32(dest.y), i32(dest.w), i32(dest.h)},
+	)
+}
 
-// 	for entity in nod.physics_world.bodies {
-// 		// Update physics with constant dt
-// 		entity.velocity += entity.acceleration * physics_dt
-// 		entity.position += entity.velocity * physics_dt
-// 	}
 
-// 	// Collision detection & resolution
-// 	resolve_collisions(nod.physics_world)
-// }
+NodConfig :: struct {
+	window_title:  string,
+	window_width:  int,
+	window_height: int,
+	target_fps:    int,
+	vsync:         bool,
+}
+
+NodError :: enum {
+	None,
+	FailedToInitSdl,
+	FailedToCreateWindow,
+	FailedToCreateRenderer,
+}
 

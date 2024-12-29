@@ -21,6 +21,7 @@ physics_init_world :: proc(world: ^PhysicsWorld, gravity: Vec2 = {0.0, -9.81}) {
 	world.gravity = gravity
 	world.bodies = make(map[EntityID]PhysicsBody)
 	world.contacts = make([dynamic]Contact)
+	world.hits = make([dynamic]Hit)
 }
 
 @(private)
@@ -32,6 +33,8 @@ physics_cleanup :: proc(world: ^PhysicsWorld) {
 		delete(body.shapes)
 		b2.DestroyBody(body.handle)
 	}
+	delete(world.contacts)
+	delete(world.hits)
 	delete(world.bodies)
 	b2.DestroyWorld(world.handle)
 }
@@ -151,11 +154,13 @@ add_box_collider :: proc(
 	half_height: f32,
 	density: f32 = 1.0,
 	friction: f32 = 0.3,
+	is_sensor: bool,
 ) -> ShapeID {
 	if body, ok := &nod.physics_world.bodies[entity_id]; ok {
 		shape_def := b2.DefaultShapeDef()
 		shape_def.density = density
 		shape_def.friction = friction
+		shape_def.isSensor = is_sensor
 
 		shape := b2.Polygon {
 			vertices = {
@@ -185,11 +190,13 @@ add_circle_collider :: proc(
 	radius: f32,
 	density: f32 = 1.0,
 	friction: f32 = 0.3,
+	is_sensor: bool,
 ) -> ShapeID {
 	if body, ok := &nod.physics_world.bodies[entity_id]; ok {
 		shape_def := b2.DefaultShapeDef()
 		shape_def.density = density
 		shape_def.friction = friction
+		shape_def.isSensor = is_sensor
 
 		circle := b2.Circle {
 			radius = radius,
@@ -244,9 +251,9 @@ apply_force :: proc(nod: ^Nod, entity_id: EntityID, impulse: Vec2, world_point: 
 	}
 }
 
-set_body_awake :: proc(nod: ^Nod, entity_id: EntityID) {
+set_body_awake :: proc(nod: ^Nod, entity_id: EntityID, awake: bool) {
 	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		b2.Body_SetAwake(body.handle, true)
+		b2.Body_SetAwake(body.handle, awake)
 	}
 }
 
@@ -259,6 +266,12 @@ apply_impulse :: proc(nod: ^Nod, entity_id: EntityID, impulse: Vec2, world_point
 			{f32(world_point.x), f32(world_point.y)},
 			true,
 		)
+	}
+}
+
+set_linear_damping :: proc(nod: ^Nod, entity_id: EntityID, damping: f32) {
+	if body, ok := nod.physics_world.bodies[entity_id]; ok {
+		b2.Body_SetLinearDamping(body.handle, damping)
 	}
 }
 
