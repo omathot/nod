@@ -110,8 +110,8 @@ process_contacts_and_hits :: proc(world: ^PhysicsWorld) {
 		contact := contact_events.beginEvents[i]
 		body_a := b2.Shape_GetBody(contact.shapeIdA)
 		body_b := b2.Shape_GetBody(contact.shapeIdB)
-		entity_a := cast(EntityID)(uintptr(b2.Body_GetUserData(body_a)))
-		entity_b := cast(EntityID)(uintptr(b2.Body_GetUserData(body_b))) // holy shit... casting to uintptr first for compiler
+		entity_a := cast(EntityID)(uintptr(b2.Body_GetUserData(body_a))) // holy shit... casting to uintptr first for compiler
+		entity_b := cast(EntityID)(uintptr(b2.Body_GetUserData(body_b)))
 
 		append(&world.contacts, Contact{body_a = entity_a, body_b = entity_b, state = .Begin})
 	}

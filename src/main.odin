@@ -72,6 +72,7 @@ fgame_update :: proc(game_ptr: rawptr, input_state: ^InputState) {
 	if is_key_held(input_state, .SPACE) {
 		fmt.println("Holding SPACE")
 	}
+	fmt.println(get_time())
 
 }
 

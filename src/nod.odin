@@ -200,6 +200,20 @@ variable_update :: proc(nod: ^Nod) {
 	}
 }
 
+// to use for precise timing
+get_ticks :: proc() -> u32 {
+	return sdl.GetTicks()
+}
+
+// to use for general seconds timing
+get_time :: proc() -> f64 {
+	return f64(sdl.GetTicks()) / 1000.0
+}
+
+get_delta_time :: proc(nod: ^Nod) -> f64 {
+	return nod.delta_time
+}
+
 draw_sprite :: proc(renderer: ^Renderer, texture: ^sdl.Texture, src, dest: Rect) {
 	sdl.RenderCopy(
 		renderer.handle,
