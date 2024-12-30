@@ -7,6 +7,11 @@ ComponentID :: distinct u32
 MAX_ENTITIES :: 10_000
 MAX_COMPONENTS :: 100
 
+ECSManager :: struct {
+	world: ^World,
+}
+
+
 // represents a unique combination of components
 Archetype :: struct {
 	id:             u64, // hash of component combination
@@ -26,18 +31,10 @@ Column :: struct {
 // Component metadata
 ComponentType :: struct {
 	id:        ComponentID,
-	name:      string,
 	size:      int,
 	alignment: int,
 }
 
-// user logic
-System :: struct {
-	id:                  SystemID,
-	name:                string,
-	required_components: bit_set[0 ..= MAX_COMPONENTS],
-	update_proc:         proc(world: ^World, dt: f32),
-}
 
 World :: struct {
 	// entities
@@ -56,6 +53,7 @@ World :: struct {
 
 	// lookup
 	entity_to_archetype: map[EntityID]u64,
+	system_map:          map[SystemID]^System,
 
 	// systems
 	systems:             [dynamic]System,
@@ -68,5 +66,24 @@ Query :: struct {
 	required_component:   bit_set[0 ..= MAX_COMPONENTS],
 	excluded_coomponents: bit_set[0 ..= MAX_COMPONENTS],
 	match_archetype:      []Archetype,
+}
+
+QueryIterator :: struct {
+	query:           ^Query,
+	archetype_index: int,
+	entity_index:    int,
+}
+
+// user logic
+System :: struct {
+	id:                  SystemID,
+	name:                string,
+	required_components: bit_set[0 ..= MAX_COMPONENTS],
+	update_proc:         proc(world: ^World, dt: f32),
+}
+
+SystemGroup :: struct {
+	systems: [dynamic]SystemID,
+	enabled: bool,
 }
 

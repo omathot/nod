@@ -1,5 +1,6 @@
 package nod
 
+import "core:container/queue"
 import "core:fmt"
 import "core:sync"
 import "core:thread"
@@ -18,6 +19,7 @@ Nod :: struct {
 	input_state:           InputState,
 	is_running:            bool,
 	physics_world:         PhysicsWorld,
+	ecs_manager:           ECSManager,
 	// asset_manager: AssetManager
 	// audio_system: AudioSystem,
 	// scene_manager: SceneManager,
@@ -69,6 +71,7 @@ nod_init :: proc(config: NodConfig) -> (^Nod, NodError) {
 	}
 
 	nod.is_running = true
+	nod.ecs_manager.world = create_world()
 	physics_init_world(&nod.physics_world)
 	init_threads(nod)
 	// nod.input_state := InputState
@@ -90,8 +93,12 @@ nod_clean :: proc(nod: ^Nod) {
 			// not allocated rn its just tests, probably add for real games
 			// free(nod.game)
 		}
+		if nod.ecs_manager.world != nil {
+			destroy_world(nod.ecs_manager.world)
+		}
 
 		// threads
+		queue.destroy(&nod.command_queue.commands)
 		if nod.physics_thread != nil {
 			thread.destroy(nod.physics_thread)
 		}
@@ -173,6 +180,23 @@ render :: proc(nod: ^Nod, interpolation: f32) {
 	sdl.RenderPresent(nod.renderer.handle)
 }
 
+// fixed_update :: proc(nod: ^Nod) {
+// 	// quit event check
+// 	if nod.input_state.quit_request ||
+// 	   (nod.should_quit != nil && nod.game != nil && nod.should_quit(nod.game)) {
+// 		fmt.println("received quit event")
+// 		nod.is_running = false
+// 		return
+// 	}
+
+// 	// ecs sytems
+// 	systems_update(nod.ecs_manager.world, f32(nod.delta_time))
+
+// 	// exposed fixed function
+// 	if nod.fixed_update_game != nil && nod.game != nil {
+// 		nod.fixed_update_game(nod.game, &nod.input_state)
+// 	}
+// }
 fixed_update :: proc(nod: ^Nod) {
 	// quit event check
 	if nod.input_state.quit_request ||
@@ -181,6 +205,9 @@ fixed_update :: proc(nod: ^Nod) {
 		nod.is_running = false
 		return
 	}
+
+	fmt.println("Running fixed update with dt:", nod.delta_time) // Debug print
+	systems_update(nod.ecs_manager.world, f32(nod.delta_time))
 
 	// user's game logic
 	if nod.fixed_update_game != nil && nod.game != nil {

@@ -52,6 +52,7 @@ create_world :: proc() -> ^World {
 	world.systems = make([dynamic]System)
 	world.free_entities = make([dynamic]EntityID)
 	world.entity_to_archetype = make(map[EntityID]u64)
+	world.system_map = make(map[SystemID]^System)
 	return world
 }
 
@@ -68,17 +69,42 @@ destroy_world :: proc(world: ^World) {
 	delete(world.systems)
 	delete(world.free_entities)
 	delete(world.entity_to_archetype)
+	delete(world.system_map)
 
 	free(world)
 }
 
-register_component :: proc(world: ^World, id: $T) -> ComponentID {
+
+// ----------------------------------------
+//----------------USER SPACE---------------
+// ----------------------------------------
+
+// __COMPONENTS
+
+// register_component :: proc(world: ^World, $T: typeid) -> ComponentID {
+// 	type_info := type_info_of(T)
+// 	id := ComponentID(world.component_count)
+
+// 	world.component_types[world.component_count] = ComponentType {
+// 		id        = id,
+// 		size      = type_info.size,
+// 		alignment = type_info.align,
+// 	}
+// 	world.component_count += 1
+// 	return id
+// }
+register_component :: proc(world: ^World, $T: typeid) -> ComponentID {
 	type_info := type_info_of(T)
 	id := ComponentID(world.component_count)
 
+	fmt.println("Registering component:")
+	fmt.println("  Type:", type_info_of(T))
+	fmt.println("  Size:", type_info.size)
+	fmt.println("  Alignment:", type_info.align)
+	fmt.println("  Component ID:", id)
+
 	world.component_types[world.component_count] = ComponentType {
 		id        = id,
-		name      = type_info.name,
 		size      = type_info.size,
 		alignment = type_info.align,
 	}
@@ -133,33 +159,41 @@ add_component :: proc(
 	new_id := hash_mask(new_mask)
 
 	if new_id not_in world.archetypes {
-		fmt.println("new archetype ID not found in world.archetypes")
-		world.archetypes[new_id] = Archetype {
-			id             = new_id,
-			component_mask = new_mask,
-			entities       = make([dynamic]EntityID),
-		}
-		world.columns[new_id] = make(map[ComponentID]Column)
+		columns := make(map[ComponentID]Column)
 
 		// init columns for all components in new archetype
 		for id := ComponentID(0); id < ComponentID(world.component_count); id += 1 {
 			if int(id) in new_mask {
 				component_type := world.component_types[id]
-				column := &world.columns[new_id][id]
-				column.size = component_type.size
-				column.stride = component_type.size
-				column.count = 0
-				column.capacity = 8
+
+				// Allocate memory first
 				data_ptr, err := mem.alloc(component_type.size * 8)
 				if err != .None {
-					fmt.println("Failed to resize columns in add_component()")
+					fmt.println("Failed to allocate memory for column")
 					return err
 				}
-				column.data = data_ptr
+
+				// Insert the full column value into the map
+				columns[id] = Column {
+					data     = data_ptr,
+					size     = component_type.size,
+					stride   = component_type.size,
+					count    = 0,
+					capacity = 8,
+				}
 			}
 		}
-	}
 
+		// Create the archetype first
+		world.archetypes[new_id] = Archetype {
+			id             = new_id,
+			component_mask = new_mask,
+			entities       = make([dynamic]EntityID),
+		}
+
+		// Then assign the columns
+		world.columns[new_id] = columns
+	}
 	// move entity to new archetype
 	archetype := &world.archetypes[new_id]
 	columns := &world.columns[new_id]
@@ -176,7 +210,7 @@ add_component :: proc(
 				old_arch := &world.archetypes[current_id]
 				for i := 0; i < len(old_arch.entities); i += 1 {
 					if old_arch.entities[i] == entity {
-						old_idx = 1
+						old_idx = i
 						break
 					}
 				}
@@ -217,10 +251,171 @@ add_component :: proc(
 	mem.copy(dest, data, col.size)
 	col.count += 1
 
-	append_elem(&archetype.entities, entity)
+	append_elem(&archetype.entities, entity) // !!! leak 64 bytes
 	world.entity_to_archetype[entity] = new_id
 
 	return .None
 
+}
+
+query :: proc(
+	world: ^World,
+	required: bit_set[0 ..= MAX_COMPONENTS],
+	excluded: bit_set[0 ..= MAX_COMPONENTS] = {},
+) -> Query {
+	matching := make([dynamic]Archetype)
+
+	// find matches
+	for _, archetype in world.archetypes {
+		// check for ALL required components
+		if required & archetype.component_mask != required {
+			continue
+		}
+
+		if excluded & archetype.component_mask != {} {
+			continue
+		}
+
+		append(&matching, archetype)
+	}
+
+	return Query {
+		world = world,
+		required_component = required,
+		excluded_coomponents = excluded,
+		match_archetype = matching[:],
+	}
+}
+
+iterate_query :: proc(query: ^Query) -> QueryIterator {
+	return QueryIterator{query = query, archetype_index = 0, entity_index = 0}
+}
+
+next_entity :: proc(iter: ^QueryIterator) -> (EntityID, bool) {
+	for iter.archetype_index < len(iter.query.match_archetype) {
+		archetype := &iter.query.match_archetype[iter.archetype_index]
+
+		if iter.entity_index < len(archetype.entities) {
+			entity := archetype.entities[iter.entity_index]
+			iter.entity_index += 1
+			return entity, true
+		}
+		iter.archetype_index += 1
+		iter.entity_index = 0
+	}
+
+	return 0, false
+}
+
+get_component :: proc(world: ^World, id: EntityID, component: ComponentID) -> (rawptr, bool) {
+	archetype_id, a_ok := world.entity_to_archetype[id]
+	if !a_ok {
+		return nil, false
+	}
+
+	columns, c_ok := &world.columns[archetype_id]
+	if !c_ok {
+		return nil, false
+	}
+
+	column, d_ok := columns[component]
+	if !d_ok {
+		return nil, false
+	}
+
+	archetype := &world.archetypes[archetype_id]
+	entity_idx := -1
+	for i := 0; i < len(archetype.entities); i += 1 {
+		if archetype.entities[i] == id {
+			entity_idx += 1
+			break
+		}
+	}
+
+	if entity_idx == -1 {
+		return nil, false
+	}
+
+	data_ptr := rawptr(uintptr(column.data) + uintptr(entity_idx * column.stride)) // data[0] + (idx * size)
+	return data_ptr, true
+}
+
+// for user type safety
+get_component_typed :: proc(
+	world: ^World,
+	id: EntityID,
+	component_id: ComponentID,
+	$T: typeid,
+) -> (
+	^T,
+	bool,
+) {
+	data, ok := get_component(world, id, component_id)
+	if !ok {
+		return nil, false
+	}
+	return cast(^T)data, true
+}
+
+
+// ___SYSTEMS
+system_add :: proc(
+	world: ^World,
+	name: string,
+	required_components: bit_set[0 ..= MAX_COMPONENTS],
+	fn: proc(_: ^World, _: f32),
+) -> SystemID {
+	system := System {
+		id                  = SystemID(len(world.systems)),
+		name                = name,
+		required_components = required_components,
+		update_proc         = fn,
+	}
+
+	append(&world.systems, system)
+	world.system_map[system.id] = &world.systems[len(world.systems) - 1] // update system lookup map
+	return system.id
+}
+
+system_remove :: proc(world: ^World, id: SystemID) {
+	for i := 0; i < len(world.systems); i += 1 {
+		if world.systems[i].id == id {
+			ordered_remove(&world.systems, i)
+			delete_key(&world.system_map, id) // update system lookup
+
+			// update map pointers, ordered_remove moved elements
+			for j := i; j < len(world.systems); j += 1 {
+				world.system_map[world.systems[j].id] = &world.systems[j]
+			}
+
+			break
+		}
+	}
+}
+
+systems_update :: proc(world: ^World, dt: f32) {
+	for system in world.systems {
+		system.update_proc(world, dt) // i feel so fancy
+	}
+}
+
+system_create_group :: proc() -> SystemGroup {
+	return SystemGroup{systems = make([dynamic]SystemID), enabled = true}
+}
+
+system_add_to_group :: proc(group: ^SystemGroup, id: SystemID) {
+	append(&group.systems, id)
+}
+
+system_update_group :: proc(world: ^World, group: ^SystemGroup, dt: f32) {
+	if !group.enabled {
+		return
+	}
+
+	for id in group.systems {
+		if system, ok := world.system_map[id]; ok {
+			system.update_proc(world, dt)
+		}
+	}
 }
 

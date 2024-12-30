@@ -73,7 +73,6 @@ fgame_update :: proc(game_ptr: rawptr, input_state: ^InputState) {
 		fmt.println("Holding SPACE")
 	}
 	fmt.println(get_time())
-
 }
 
 game_should_quit :: proc(game_ptr: rawptr) -> bool {
@@ -84,8 +83,11 @@ game_should_quit :: proc(game_ptr: rawptr) -> bool {
 main :: proc() {
 	args := os.args
 	if len(args) > 1 {
-		if args[1] == "test" {
+		if args[1] == "physics" {
 			physics_test()
+			return
+		} else if args[1] == "ecs" {
+			ecs_test()
 			return
 		}
 	}
