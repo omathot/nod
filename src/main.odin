@@ -131,11 +131,9 @@ PhysicsTest :: struct {
 init_physics_test :: proc(game: ^PhysicsTest, nod: ^Nod) {
 	fmt.println("Initializing physics test")
 
-	// Set and verify gravity
 	set_gravity(nod, {0, -9.81})
 	fmt.println("Set gravity to (0, -9.81)")
 
-	// Create floor (static body)
 	game.floor_id = 1
 	floor_body := add_rigid_body(nod, game.floor_id, .Static, {0, -2})
 	if floor_body == nil {
@@ -147,9 +145,8 @@ init_physics_test :: proc(game: ^PhysicsTest, nod: ^Nod) {
 	shape_id := add_box_collider(nod, game.floor_id, 5, 0.5, 1.0, 0.3, false)
 	fmt.println("Added floor collider, shape_id:", shape_id)
 
-	// Create falling box (dynamic body)
 	game.box_id = 2
-	box_body := add_rigid_body(nod, game.box_id, .Dynamic, {0, 5})
+	box_body := add_rigid_body(nod, game.box_id, .Dynamic, {0, 15})
 	if box_body == nil {
 		fmt.println("Failed to create box body!")
 		return
@@ -190,15 +187,17 @@ physics_test_display :: proc(game_ptr: rawptr, nod: ^Nod, interpolation: f32) {
 	box_pos := get_position(nod, game.box_id)
 	box_vel := get_velocity(nod, game.box_id)
 
-	fmt.printf(
-		"Floor pos: (%.2f, %.2f) | Box pos: (%.2f, %.2f) | Box vel: (%.2f, %.2f)\n",
-		floor_pos.x,
-		floor_pos.y,
-		box_pos.x,
-		box_pos.y,
-		box_vel.x,
-		box_vel.y,
-	)
+	if box_pos.y > 1 {
+		fmt.printf(
+			"Floor pos: (%.2f, %.2f) | Box pos: (%.2f, %.2f) | Box vel: (%.2f, %.2f)\n",
+			floor_pos.x,
+			floor_pos.y,
+			box_pos.x,
+			box_pos.y,
+			box_vel.x,
+			box_vel.y,
+		)
+	}
 }
 
 physics_test_should_quit :: proc(game_ptr: rawptr) -> bool {

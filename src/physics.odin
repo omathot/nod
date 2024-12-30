@@ -46,27 +46,15 @@ physics_update :: proc(world: ^PhysicsWorld, dt: f32) {
 	// cache
 	physics_cache(world)
 
-	new_contacts := make([dynamic]Contact)
-	for &contact in world.contacts {
-		if contact.state == .Begin {
-			contact.state = .Stay
-			append(&new_contacts, contact)
-		} else if contact.state == .Stay {
-			append(&new_contacts, contact)
-		}
-	}
-	delete(world.contacts)
-	world.contacts = new_contacts
-
-	velocity_iterations: f32 = 8
-	position_iterations: i32 = 3
-	b2.World_Step(world.handle, velocity_iterations, position_iterations)
+	// kinda standard
+	sub_steps: c.int = 4
+	b2.World_Step(world.handle, dt, sub_steps)
 
 	// get new contacts/hits
 	process_contacts_and_hits(world)
 
 }
-//!! DEBUG FUNCTION
+// !!DEBUG Function
 // physics_update :: proc(world: ^PhysicsWorld, dt: f32) {
 // 	fmt.println("\nPhysics Update:")
 // 	fmt.println("dt:", dt)
