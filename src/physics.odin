@@ -1,5 +1,7 @@
 package nod
 
+import "core:c"
+import "core:fmt"
 import "core:math"
 import b2 "vendor:box2d"
 
@@ -64,6 +66,53 @@ physics_update :: proc(world: ^PhysicsWorld, dt: f32) {
 	process_contacts_and_hits(world)
 
 }
+//!! DEBUG FUNCTION
+// physics_update :: proc(world: ^PhysicsWorld, dt: f32) {
+// 	fmt.println("\nPhysics Update:")
+// 	fmt.println("dt:", dt)
+
+// 	// Check gravity
+// 	gravity := b2.World_GetGravity(world.handle)
+// 	fmt.printf("Current gravity: (%.2f, %.2f)\n", gravity.x, gravity.y)
+
+// 	// Check body states before step
+// 	fmt.println("\nPre-step body states:")
+// 	for id, body in world.bodies {
+// 		// Get full body state
+// 		pos := b2.Body_GetPosition(body.handle)
+// 		vel := b2.Body_GetLinearVelocity(body.handle)
+// 		ang_vel := b2.Body_GetAngularVelocity(body.handle)
+// 		is_awake := b2.Body_IsAwake(body.handle)
+// 		body_type := b2.Body_GetType(body.handle)
+
+// 		fmt.printf("Body %d:\n", id)
+// 		fmt.printf("  type=%v\n", body_type)
+// 		fmt.printf("  pos=(%.2f, %.2f)\n", pos.x, pos.y)
+// 		fmt.printf("  vel=(%.2f, %.2f)\n", vel.x, vel.y)
+// 		fmt.printf("  ang_vel=%.2f\n", ang_vel)
+// 		fmt.printf("  awake=%v\n", is_awake)
+// 	}
+
+// 	// Cache previous state
+// 	physics_cache(world)
+
+// 	// Fixed values
+// 	sub_steps: c.int = 4
+
+// 	fmt.println("\nCalling World_Step...")
+// 	b2.World_Step(world.handle, dt, sub_steps)
+// 	fmt.println("World step complete")
+
+// 	// Debug state after step
+// 	fmt.println("\nPost-step body states:")
+// 	for id, body in world.bodies {
+// 		pos := b2.Body_GetPosition(body.handle)
+// 		vel := b2.Body_GetLinearVelocity(body.handle)
+// 		fmt.printf("Body %d: pos=(%.2f, %.2f), vel=(%.2f, %.2f)\n", id, pos.x, pos.y, vel.x, vel.y)
+// 	}
+
+// 	process_contacts_and_hits(world)
+// }
 
 @(private)
 process_contacts_and_hits :: proc(world: ^PhysicsWorld) {
@@ -157,25 +206,13 @@ add_box_collider :: proc(
 	is_sensor: bool,
 ) -> ShapeID {
 	if body, ok := &nod.physics_world.bodies[entity_id]; ok {
+		box := b2.MakeBox(half_width, half_height)
 		shape_def := b2.DefaultShapeDef()
 		shape_def.density = density
 		shape_def.friction = friction
 		shape_def.isSensor = is_sensor
 
-		shape := b2.Polygon {
-			vertices = {
-				-half_width,
-				-half_height,
-				half_width,
-				-half_height,
-				half_width,
-				half_height,
-				-half_width,
-				half_height,
-			},
-			count    = 4,
-		}
-		shape_id := b2.CreatePolygonShape(body.handle, shape_def, shape)
+		shape_id := b2.CreatePolygonShape(body.handle, shape_def, box)
 		shape_wrap := ShapeID(transmute(u64)shape_id)
 		append(&body.shapes, shape_wrap)
 		return shape_wrap

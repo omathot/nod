@@ -10,4 +10,4 @@ build :
 
 test :
 	@mkdir -p bin
-	odin build test/ -collection:nod=src -out:bin/test
+	odin run src/ -collection:lib=lib -out:bin/test -- test
