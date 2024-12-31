@@ -1,12 +1,12 @@
 # Nod
-Learning all the bits and pieces of engines by making one using Odinlang
+Learning all the bits and pieces of game engines by making one using Odinlang
 
 ## Installation
 
 ### requirements
-odin
-
-sdl2
+- odin
+- odin-imgui (https://gitlab.com/L-4/odin-imgui)
+- sdl2
 
 ```bash
 git clone https://github.com/omathot/nod.git --recurse-submodules
