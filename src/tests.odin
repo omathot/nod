@@ -138,18 +138,32 @@ ecs_test_update :: proc(game_ptr: rawptr, input_state: ^InputState) {
 ecs_test_display :: proc(game_ptr: rawptr, nod: ^Nod, interpolation: f32) {
 	game := cast(^ECSTest)game_ptr
 
-	if pos_ptr, ok := get_component_typed(
+	// Get both position and velocity components
+	pos_ptr, pos_ok := get_component_typed(
 		nod.ecs_manager.world,
 		game.entity,
-		game.position_id,
+		test_position_id, // Using the global test_position_id
 		TestPosition,
-	); ok {
-		// fmt.printf("Display - Drawing at: (%f, %f)\n", pos_ptr.x, pos_ptr.y)
+	)
+
+	vel_ptr, vel_ok := get_component_typed(
+		nod.ecs_manager.world,
+		game.entity,
+		test_velocity_id, // Using the global test_velocity_id
+		TestVelocity,
+	)
+
+	if pos_ok && vel_ok {
+		// Calculate interpolated position
+		interpolated_x := pos_ptr.x + (vel_ptr.x * (1.0 / f32(TICKS_PER_SECOND))) * interpolation
+		interpolated_y := pos_ptr.y + (vel_ptr.y * (1.0 / f32(TICKS_PER_SECOND))) * interpolation
+
 		sdl.SetRenderDrawColor(nod.renderer.handle, 255, 0, 0, 255)
-		rect := sdl.Rect{i32(pos_ptr.x - 25), i32(pos_ptr.y - 25), 50, 50}
+		rect := sdl.Rect{i32(interpolated_x - 25), i32(interpolated_y - 25), 50, 50}
 		sdl.RenderFillRect(nod.renderer.handle, &rect)
 	}
 }
+
 ecs_test_should_quit :: proc(game_ptr: rawptr) -> bool {
 	game := cast(^ECSTest)game_ptr
 	return !game.running

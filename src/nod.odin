@@ -125,8 +125,8 @@ nod_run :: proc(nod: ^Nod) {
 		frame_time := f64(current_counter - nod.prev_counter) / nod.performance_frequency
 		nod.prev_counter = current_counter
 
-		if frame_time > 0.1 {
-			frame_time = 0.1
+		if frame_time > 0.16 {
+			frame_time = 0.16
 		}
 
 		nod.current_time += frame_time
@@ -207,7 +207,7 @@ fixed_update :: proc(nod: ^Nod) {
 	}
 
 	// fmt.println("Running fixed update with dt:", nod.delta_time) // Debug print
-	systems_update(nod.ecs_manager.world, f32(nod.delta_time))
+	systems_update(nod.ecs_manager.world, 1.0 / f32(TICKS_PER_SECOND))
 
 	// user's game logic
 	if nod.fixed_update_game != nil && nod.game != nil {
