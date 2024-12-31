@@ -8,15 +8,14 @@ import b2 "vendor:box2d"
 import sdl "vendor:sdl2"
 
 
-TICKS_PER_SECOND :: 25
-MAX_FRAMESKIP :: 5 // sqrt(TICKS_PER_SECOND)
+TICKS_PER_SECOND :: 60
+MAX_FRAMESKIP :: 6 // sqrt(TICKS_PER_SECOND)
 
 Nod :: struct {
 	window:                Window,
 	renderer:              Renderer,
 
 	// core
-	input_state:           InputState,
 	is_running:            bool,
 	physics_world:         PhysicsWorld,
 	ecs_manager:           ECSManager,
@@ -74,7 +73,6 @@ nod_init :: proc(config: NodConfig) -> (^Nod, NodError) {
 	nod.ecs_manager.world = create_world()
 	physics_init_world(&nod.physics_world)
 	init_threads(nod)
-	// nod.input_state := InputState
 
 	nod.window = window
 	nod.renderer = renderer
@@ -94,6 +92,7 @@ nod_clean :: proc(nod: ^Nod) {
 			// free(nod.game)
 		}
 		if nod.ecs_manager.world != nil {
+			queue.destroy(&nod.ecs_manager.world.input_state.event_buffer)
 			destroy_world(nod.ecs_manager.world)
 		}
 
@@ -118,7 +117,7 @@ nod_run :: proc(nod: ^Nod) {
 	accumulator := f64(0)
 	nod.is_running = true
 
-	FIXED_DT := 1.0 / f64(TICKS_PER_SECOND) // 0.04 for 25 TPS
+	FIXED_DT := 1.0 / f64(TICKS_PER_SECOND) // ~16.67ms
 
 
 	for nod.is_running {
@@ -126,15 +125,15 @@ nod_run :: proc(nod: ^Nod) {
 		frame_time := f64(current_counter - nod.prev_counter) / nod.performance_frequency
 		nod.prev_counter = current_counter
 
-		if frame_time > 0.250 {
-			frame_time = 0.25
+		if frame_time > 0.1 {
+			frame_time = 0.1
 		}
 
 		nod.current_time += frame_time
 		nod.delta_time = frame_time
 
-		update_input(&nod.input_state)
-		if nod.input_state.quit_request {
+		update_input(nod.ecs_manager.world.input_state)
+		if nod.ecs_manager.world.input_state.quit_request {
 			nod.is_running = false
 			push_command(&nod.command_queue, Command{type = .Quit})
 			break
@@ -143,6 +142,7 @@ nod_run :: proc(nod: ^Nod) {
 		accumulator += frame_time
 		loops := 0
 		for accumulator > FIXED_DT && loops < MAX_FRAMESKIP {
+			process_fixed_update(nod.ecs_manager.world.input_state)
 			// update game world
 			fixed_update(nod)
 
@@ -199,19 +199,19 @@ render :: proc(nod: ^Nod, interpolation: f32) {
 // }
 fixed_update :: proc(nod: ^Nod) {
 	// quit event check
-	if nod.input_state.quit_request ||
+	if nod.ecs_manager.world.input_state.quit_request ||
 	   (nod.should_quit != nil && nod.game != nil && nod.should_quit(nod.game)) {
 		fmt.println("received quit event")
 		nod.is_running = false
 		return
 	}
 
-	fmt.println("Running fixed update with dt:", nod.delta_time) // Debug print
+	// fmt.println("Running fixed update with dt:", nod.delta_time) // Debug print
 	systems_update(nod.ecs_manager.world, f32(nod.delta_time))
 
 	// user's game logic
 	if nod.fixed_update_game != nil && nod.game != nil {
-		nod.fixed_update_game(nod.game, &nod.input_state)
+		nod.fixed_update_game(nod.game, nod.ecs_manager.world.input_state)
 	}
 }
 
@@ -223,7 +223,7 @@ fixed_update :: proc(nod: ^Nod) {
 // - Visual effects
 variable_update :: proc(nod: ^Nod) {
 	if nod.frame_update_game != nil && nod.game != nil {
-		nod.frame_update_game(nod.game, &nod.input_state)
+		nod.frame_update_game(nod.game, nod.ecs_manager.world.input_state)
 	}
 }
 

@@ -11,7 +11,6 @@ ECSManager :: struct {
 	world: ^World,
 }
 
-
 // represents a unique combination of components
 Archetype :: struct {
 	id:             u64, // hash of component combination
@@ -57,6 +56,9 @@ World :: struct {
 
 	// systems
 	systems:             [dynamic]System,
+
+	// Queriable resources
+	input_state:         ^InputState,
 }
 
 

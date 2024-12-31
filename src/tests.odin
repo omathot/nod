@@ -22,16 +22,26 @@ test_position_id: ComponentID
 test_velocity_id: ComponentID
 
 movement_system :: proc(world: ^World, dt: f32) {
+	input := get_input(world)
+	if is_key_pressed(input, .SPACE) {
+		fmt.println("caught SPACE")
+	}
+	if is_key_pressed(input, .A) {
+		fmt.println("caught A")
+	}
+	if is_key_held(input, .A) {
+		fmt.println("holding A")
+	}
 	required := bit_set[0 ..= MAX_COMPONENTS]{}
 	required += {int(test_position_id), int(test_velocity_id)}
 
-	fmt.println("\nMovement system running")
-	fmt.println("Required components:", required)
+	// fmt.println("\nMovement system running")
+	// // fmt.println("Required components:", required)
 
 	q := query(world, required)
 	defer delete(q.match_archetype)
 
-	fmt.println("Query found", len(q.match_archetype), "matching archetypes")
+	// fmt.println("Query found", len(q.match_archetype), "matching archetypes")
 
 	it := iterate_query(&q)
 	found_entities := 0
@@ -41,20 +51,11 @@ movement_system :: proc(world: ^World, dt: f32) {
 		vel, vel_ok := get_component_typed(world, entity, test_velocity_id, TestVelocity)
 
 		if pos_ok && vel_ok {
-			fmt.printf(
-				"Updating entity %d pos:(%f, %f) vel:(%f, %f) dt:%f\n",
-				entity,
-				pos.x,
-				pos.y,
-				vel.x,
-				vel.y,
-				dt,
-			)
 			pos.x += vel.x * dt
 			pos.y += vel.y * dt
 		}
 	}
-	fmt.println("Movement system processed", found_entities, "entities")
+	// fmt.println("Movement system processed", found_entities, "entities")
 }
 
 init_ecs_test :: proc(game: ^ECSTest, nod: ^Nod) {
@@ -126,6 +127,7 @@ init_ecs_test :: proc(game: ^ECSTest, nod: ^Nod) {
 	game.running = true
 }
 
+
 ecs_test_update :: proc(game_ptr: rawptr, input_state: ^InputState) {
 	game := cast(^ECSTest)game_ptr
 	if is_key_pressed(input_state, .ESCAPE) {
@@ -142,7 +144,7 @@ ecs_test_display :: proc(game_ptr: rawptr, nod: ^Nod, interpolation: f32) {
 		game.position_id,
 		TestPosition,
 	); ok {
-		fmt.printf("Display - Drawing at: (%f, %f)\n", pos_ptr.x, pos_ptr.y)
+		// fmt.printf("Display - Drawing at: (%f, %f)\n", pos_ptr.x, pos_ptr.y)
 		sdl.SetRenderDrawColor(nod.renderer.handle, 255, 0, 0, 255)
 		rect := sdl.Rect{i32(pos_ptr.x - 25), i32(pos_ptr.y - 25), 50, 50}
 		sdl.RenderFillRect(nod.renderer.handle, &rect)

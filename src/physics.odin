@@ -46,8 +46,8 @@ physics_update :: proc(world: ^PhysicsWorld, dt: f32) {
 	// cache
 	physics_cache(world)
 
-	// kinda standard
-	sub_steps: c.int = 4
+	// changed from 4 to 8 for better simulation
+	sub_steps: c.int = 8
 	b2.World_Step(world.handle, dt, sub_steps)
 
 	// get new contacts/hits

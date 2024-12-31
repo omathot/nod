@@ -53,10 +53,12 @@ create_world :: proc() -> ^World {
 	world.free_entities = make([dynamic]EntityID)
 	world.entity_to_archetype = make(map[EntityID]u64)
 	world.system_map = make(map[SystemID]^System)
+	world.input_state = new(InputState)
 	return world
 }
 
 destroy_world :: proc(world: ^World) {
+	// components
 	for archetype_id, columns in world.columns {
 		for _, column in columns {
 			free(column.data)
@@ -65,11 +67,18 @@ destroy_world :: proc(world: ^World) {
 	}
 	delete(world.columns)
 
+	// archetypes
+	for _, archetype in &world.archetypes {
+		delete(archetype.entities)
+	}
 	delete(world.archetypes)
+
+	// rest
 	delete(world.systems)
 	delete(world.free_entities)
 	delete(world.entity_to_archetype)
 	delete(world.system_map)
+	free(world.input_state)
 
 	free(world)
 }
@@ -81,27 +90,9 @@ destroy_world :: proc(world: ^World) {
 
 // __COMPONENTS
 
-// register_component :: proc(world: ^World, $T: typeid) -> ComponentID {
-// 	type_info := type_info_of(T)
-// 	id := ComponentID(world.component_count)
-
-// 	world.component_types[world.component_count] = ComponentType {
-// 		id        = id,
-// 		size      = type_info.size,
-// 		alignment = type_info.align,
-// 	}
-// 	world.component_count += 1
-// 	return id
-// }
 register_component :: proc(world: ^World, $T: typeid) -> ComponentID {
 	type_info := type_info_of(T)
 	id := ComponentID(world.component_count)
-
-	fmt.println("Registering component:")
-	fmt.println("  Type:", type_info_of(T))
-	fmt.println("  Size:", type_info.size)
-	fmt.println("  Alignment:", type_info.align)
-	fmt.println("  Component ID:", id)
 
 	world.component_types[world.component_count] = ComponentType {
 		id        = id,
@@ -111,6 +102,26 @@ register_component :: proc(world: ^World, $T: typeid) -> ComponentID {
 	world.component_count += 1
 	return id
 }
+
+// !DEBUG function
+// register_component :: proc(world: ^World, $T: typeid) -> ComponentID {
+// 	type_info := type_info_of(T)
+// 	id := ComponentID(world.component_count)
+
+// 	fmt.println("Registering component:")
+// 	fmt.println("  Type:", type_info_of(T))
+// 	fmt.println("  Size:", type_info.size)
+// 	fmt.println("  Alignment:", type_info.align)
+// 	fmt.println("  Component ID:", id)
+
+// 	world.component_types[world.component_count] = ComponentType {
+// 		id        = id,
+// 		size      = type_info.size,
+// 		alignment = type_info.align,
+// 	}
+// 	world.component_count += 1
+// 	return id
+// }
 
 create_entity :: proc(world: ^World) -> EntityID {
 	id: EntityID
@@ -355,6 +366,10 @@ get_component_typed :: proc(
 		return nil, false
 	}
 	return cast(^T)data, true
+}
+
+get_input :: proc(world: ^World) -> ^InputState {
+	return world.input_state
 }
 
 
