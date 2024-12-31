@@ -1,4 +1,4 @@
-# Nod engine
+# Nod
 Learning all the bits and pieces of engines by making one using Odinlang
 
 ## Installation
