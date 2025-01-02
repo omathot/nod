@@ -16,3 +16,7 @@ physics :
 ecs :
 	@mkdir -p bin
 	odin run src/ -collection:lib=lib -out:bin/ecs -debug -sanitize:address -- ecs
+
+test : 
+	@mkdir -p bin/tests
+	odin test tests -collection:lib=lib -out:bin/tests/test
