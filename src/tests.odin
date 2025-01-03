@@ -32,6 +32,9 @@ movement_system :: proc(world: ^World, dt: f32) {
 	if is_key_held(input, .A) {
 		fmt.println("holding A")
 	}
+	if is_key_pressed(input, .ESCAPE) {
+		input.quit_request = true
+	}
 	required := bit_set[0 ..= MAX_COMPONENTS]{}
 	required += {int(test_position_id), int(test_velocity_id)}
 
@@ -164,10 +167,6 @@ ecs_test_display :: proc(game_ptr: rawptr, nod: ^Nod, interpolation: f32) {
 	}
 }
 
-ecs_test_should_quit :: proc(game_ptr: rawptr) -> bool {
-	game := cast(^ECSTest)game_ptr
-	return !game.running
-}
 
 alloc_clean :: proc(track: ^mem.Tracking_Allocator) {
 	for _, leak in track.allocation_map {
@@ -206,7 +205,6 @@ ecs_test :: proc() {
 	nod.fixed_update_game = ecs_test_update
 	nod.frame_update_game = ecs_test_update
 	nod.render_game = ecs_test_display
-	nod.should_quit = ecs_test_should_quit
 
 	fmt.println("Setup complete, starting game loop")
 	nod_run(nod)

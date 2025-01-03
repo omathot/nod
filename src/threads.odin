@@ -52,6 +52,13 @@ TransformState :: struct {
 	scale:    Vec2,
 }
 
+PhysicsThreadContext :: struct {
+	world:            ^World,
+	command_queue:    ^CommandQueue,
+	physics_complete: ^sync.Sema,
+	is_running:       ^bool, // nod.is_running
+}
+
 init_threads :: proc(nod: ^Nod) {
 	queue.init(&nod.command_queue.commands)
 
@@ -63,10 +70,35 @@ init_threads :: proc(nod: ^Nod) {
 	nod.state_buffer.read_index = 0
 	nod.state_buffer.write_index = 1
 
-	nod.physics_thread = thread.create_and_start_with_data(nod, proc(data: rawptr) {
-		nod := cast(^Nod)data
-		physics_thread_loop(nod)
-	})
+	// context
+	nod.physics_thread_ctx = new(PhysicsThreadContext)
+	nod.physics_thread_ctx.world = nod.ecs_manager.world
+	nod.physics_thread_ctx.command_queue = &nod.command_queue
+	nod.physics_thread_ctx.physics_complete = &nod.physics_complete
+	nod.physics_thread_ctx.is_running = &nod.is_running
+
+	nod.physics_thread = thread.create_and_start_with_data(
+		nod.physics_thread_ctx,
+		physics_thread_loop,
+	)
+}
+
+cleanup_threads :: proc(nod: ^Nod) {
+	if nod == nil do return
+
+	if nod.is_running {
+		push_command(&nod.command_queue, Command{type = .Quit})
+	}
+
+	if nod.physics_thread != nil {
+		thread.join(nod.physics_thread)
+		free(nod.physics_thread_ctx)
+		thread.destroy(nod.physics_thread)
+	}
+
+	sync.mutex_lock(&nod.command_queue.mutex)
+	queue.destroy(&nod.command_queue.commands)
+	sync.mutex_unlock(&nod.command_queue.mutex)
 }
 
 
@@ -86,29 +118,25 @@ pop_command :: proc(cmd_queue: ^CommandQueue) -> (Command, bool) {
 	return queue.pop_front(&cmd_queue.commands), true
 }
 
-physics_thread_loop :: proc(nod: ^Nod) {
-	// fmt.println("Physics thread started")
-	for nod.is_running {
-		// fmt.println("Physics: Waiting for command")
-		sync.sema_wait(&nod.command_queue.sem)
-		// fmt.println("Physics: Got semaphore signal")
+physics_thread_loop :: proc(data: rawptr) {
+	ctx := cast(^PhysicsThreadContext)data
 
-		if cmd, ok := pop_command(&nod.command_queue); ok {
-			// fmt.println("Physics: Processing command:", cmd.type)
+	for ctx.is_running^ {
+		sync.sema_wait(&ctx.command_queue.sem)
+
+		if cmd, ok := pop_command(ctx.command_queue); ok {
 			#partial switch cmd.type {
 			case .UpdatePhysics:
-				physics_update(&nod.physics_world, 1.0 / f32(TICKS_PER_SECOND))
-				// fmt.println("Physics: Update complete, posting completion")
-				sync.sema_post(&nod.physics_complete)
+				if physics_world, err := get_resource(ctx.world.resources, PhysicsWorld);
+				   err == .None {
+					physics_update(physics_world, 1.0 / f32(TICKS_PER_SECOND))
+				}
+				sync.sema_post(ctx.physics_complete)
 			case .Quit:
-				// fmt.println("Physics: Quit command received")
-				sync.sema_post(&nod.physics_complete)
+				sync.sema_post(ctx.physics_complete)
 				break
 			}
-		} else {
-			// fmt.println("Physics: Failed to get command")
 		}
 	}
-	// fmt.println("Physics thread ended")
 }
 

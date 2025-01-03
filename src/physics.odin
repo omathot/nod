@@ -157,7 +157,7 @@ physics_cache :: proc(world: ^PhysicsWorld) {
 
 // Body Creation
 add_rigid_body :: proc(
-	nod: ^Nod,
+	world: ^World,
 	entity_id: EntityID,
 	body_type: PhysicsBodyType,
 	position: Vec2,
@@ -175,20 +175,26 @@ add_rigid_body :: proc(
 	body_def.position = {f32(position.x), f32(position.y)}
 	body_def.userData = rawptr(uintptr(entity_id))
 
-	body_handle := b2.CreateBody(nod.physics_world.handle, body_def)
-	body := PhysicsBody {
-		handle = body_handle,
-		type = body_type,
-		entity_id = entity_id,
-		transform = Transform{position = position},
-	}
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		body_handle := b2.CreateBody(physics_world.handle, body_def)
+		body := PhysicsBody {
+			handle = body_handle,
+			type = body_type,
+			entity_id = entity_id,
+			transform = Transform{position = position},
+		}
 
-	nod.physics_world.bodies[entity_id] = body
-	return &nod.physics_world.bodies[entity_id]
+		physics_world.bodies[entity_id] = body
+		return &physics_world.bodies[entity_id]
+
+	} else {
+		fmt.eprintln("Failed to get PhysicsWorld Resource")
+		return nil
+	}
 }
 
 add_box_collider :: proc(
-	nod: ^Nod,
+	world: ^World,
 	entity_id: EntityID,
 	half_width: f32,
 	half_height: f32,
@@ -196,50 +202,59 @@ add_box_collider :: proc(
 	friction: f32 = 0.3,
 	is_sensor: bool,
 ) -> ShapeID {
-	if body, ok := &nod.physics_world.bodies[entity_id]; ok {
-		box := b2.MakeBox(half_width, half_height)
-		shape_def := b2.DefaultShapeDef()
-		shape_def.density = density
-		shape_def.friction = friction
-		shape_def.isSensor = is_sensor
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
 
-		shape_id := b2.CreatePolygonShape(body.handle, shape_def, box)
-		shape_wrap := ShapeID(transmute(u64)shape_id)
-		append(&body.shapes, shape_wrap)
-		return shape_wrap
-		// body.shapes = ShapeID(transmute(u64)shape_id)
+			box := b2.MakeBox(half_width, half_height)
+			shape_def := b2.DefaultShapeDef()
+			shape_def.density = density
+			shape_def.friction = friction
+			shape_def.isSensor = is_sensor
+
+			shape_id := b2.CreatePolygonShape(body.handle, shape_def, box)
+			shape_wrap := ShapeID(transmute(u64)shape_id)
+			append(&body.shapes, shape_wrap)
+			return shape_wrap
+			// body.shapes = ShapeID(transmute(u64)shape_id)
+		}
+	} else {
+		fmt.eprintln("Failed to get PhysicsWorld Resource")
 	}
 	return ShapeID(0)
 }
 
 add_circle_collider :: proc(
-	nod: ^Nod,
+	world: ^World,
 	entity_id: EntityID,
 	radius: f32,
 	density: f32 = 1.0,
 	friction: f32 = 0.3,
 	is_sensor: bool,
 ) -> ShapeID {
-	if body, ok := &nod.physics_world.bodies[entity_id]; ok {
-		shape_def := b2.DefaultShapeDef()
-		shape_def.density = density
-		shape_def.friction = friction
-		shape_def.isSensor = is_sensor
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			shape_def := b2.DefaultShapeDef()
+			shape_def.density = density
+			shape_def.friction = friction
+			shape_def.isSensor = is_sensor
 
-		circle := b2.Circle {
-			radius = radius,
+			circle := b2.Circle {
+				radius = radius,
+			}
+			shape_id := b2.CreateCircleShape(body.handle, shape_def, circle)
+			shape_wrap := ShapeID(transmute(u64)shape_id)
+
+			append(&body.shapes, shape_wrap)
+			return shape_wrap
 		}
-		shape_id := b2.CreateCircleShape(body.handle, shape_def, circle)
-		shape_wrap := ShapeID(transmute(u64)shape_id)
-
-		append(&body.shapes, shape_wrap)
-		return shape_wrap
+	} else {
+		fmt.eprintln("Failed to get PhysicsWorld Resource")
 	}
 	return ShapeID(0)
 }
 
 add_capsule_collider :: proc(
-	nod: ^Nod,
+	world: ^World,
 	entity_id: EntityID,
 	center1: f32,
 	center2: f32,
@@ -248,25 +263,28 @@ add_capsule_collider :: proc(
 	friction: f32 = 0.3,
 	is_sensor: bool,
 ) -> ShapeID {
-	if body, ok := &nod.physics_world.bodies[entity_id]; ok {
-		shape_def := b2.DefaultShapeDef()
-		shape_def.density = density
-		shape_def.friction = friction
-		shape_def.isSensor = is_sensor
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			shape_def := b2.DefaultShapeDef()
+			shape_def.density = density
+			shape_def.friction = friction
+			shape_def.isSensor = is_sensor
 
-		capsule := b2.Capsule {
-			center1 = center1,
-			center2 = center2,
-			radius  = radius,
+			capsule := b2.Capsule {
+				center1 = center1,
+				center2 = center2,
+				radius  = radius,
+			}
+
+			shape_id := b2.CreateCapsuleShape(body.handle, shape_def, capsule)
+			shape_wrap := ShapeID(transmute(u64)shape_id)
+
+			append(&body.shapes, shape_wrap)
+			return shape_wrap
 		}
-
-		shape_id := b2.CreateCapsuleShape(body.handle, shape_def, capsule)
-		shape_wrap := ShapeID(transmute(u64)shape_id)
-
-		append(&body.shapes, shape_wrap)
-		return shape_wrap
+	} else {
+		fmt.eprintln("Failed to get PhysicsWorld Resource")
 	}
-
 	return ShapeID(0)
 }
 
@@ -284,143 +302,179 @@ destroy_physics_body :: proc(world: ^PhysicsWorld, entity_id: EntityID) {
 
 
 // Movement n Forces
-set_gravity :: proc(nod: ^Nod, gravity: Vec2) {
-	nod.physics_world.gravity = gravity
-	b2.World_SetGravity(nod.physics_world.handle, {f32(gravity.x), f32(gravity.y)})
+set_gravity :: proc(world: ^World, gravity: Vec2) {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		physics_world.gravity = gravity
+		b2.World_SetGravity(physics_world.handle, {f32(gravity.x), f32(gravity.y)})
+	}
 }
 
-set_position :: proc(nod: ^Nod, entity_id: EntityID, position: Vec2) {
-	if body, ok := &nod.physics_world.bodies[entity_id]; ok {
-		b2.Body_SetTransform(
-			body.handle,
-			{f32(position.x), f32(position.y)},
-			b2.MakeRot(body.transform.rotation),
-		)
+set_position :: proc(world: ^World, entity_id: EntityID, position: Vec2) {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			b2.Body_SetTransform(
+				body.handle,
+				{f32(position.x), f32(position.y)},
+				b2.MakeRot(body.transform.rotation),
+			)
+		}
+
 	}
 }
 
 
-set_velocity :: proc(nod: ^Nod, entity_id: EntityID, velocity: Vec2) {
-	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		b2.Body_SetLinearVelocity(body.handle, {f32(velocity.x), f32(velocity.y)})
+set_velocity :: proc(world: ^World, entity_id: EntityID, velocity: Vec2) {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			b2.Body_SetLinearVelocity(body.handle, {f32(velocity.x), f32(velocity.y)})
+		}
+
 	}
 }
 
-set_angular_velocity :: proc(nod: ^Nod, entity_id: EntityID, velocity: f32) {
-	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		b2.Body_SetAngularVelocity(body.handle, velocity)
+set_angular_velocity :: proc(world: ^World, entity_id: EntityID, velocity: f32) {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			b2.Body_SetAngularVelocity(body.handle, velocity)
+		}
 	}
 }
 
-apply_force :: proc(nod: ^Nod, entity_id: EntityID, impulse: Vec2, world_point: Vec2) {
-	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		b2.Body_ApplyForce(
-			body.handle,
-			{f32(impulse.x), f32(impulse.y)},
-			{f32(world_point.x), f32(world_point.y)},
-			true, // b2 puts bodies to sleep after a while, so they're not simulated
-		)
+apply_force :: proc(world: ^World, entity_id: EntityID, impulse: Vec2, world_point: Vec2) {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			b2.Body_ApplyForce(
+				body.handle,
+				{f32(impulse.x), f32(impulse.y)},
+				{f32(world_point.x), f32(world_point.y)},
+				true, // b2 puts bodies to sleep after a while, so they're not simulated
+			)
+		}
 	}
 }
 
-set_body_awake :: proc(nod: ^Nod, entity_id: EntityID, awake: bool) {
-	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		b2.Body_SetAwake(body.handle, awake)
+set_body_awake :: proc(world: ^World, entity_id: EntityID, awake: bool) {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			b2.Body_SetAwake(body.handle, awake)
+		}
 	}
 }
 
 // should be used for one shot impulses
-apply_impulse :: proc(nod: ^Nod, entity_id: EntityID, impulse: Vec2, world_point: Vec2) {
-	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		b2.Body_ApplyLinearImpulse(
-			body.handle,
-			{f32(impulse.x), f32(impulse.y)},
-			{f32(world_point.x), f32(world_point.y)},
-			true,
-		)
+apply_impulse :: proc(world: ^World, entity_id: EntityID, impulse: Vec2, world_point: Vec2) {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			b2.Body_ApplyLinearImpulse(
+				body.handle,
+				{f32(impulse.x), f32(impulse.y)},
+				{f32(world_point.x), f32(world_point.y)},
+				true,
+			)
+		}
 	}
 }
 
-set_linear_damping :: proc(nod: ^Nod, entity_id: EntityID, damping: f32) {
-	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		b2.Body_SetLinearDamping(body.handle, damping)
+set_linear_damping :: proc(world: ^World, entity_id: EntityID, damping: f32) {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			b2.Body_SetLinearDamping(body.handle, damping)
+		}
 	}
 }
 
 // Queries
-get_position :: proc(nod: ^Nod, entity_id: EntityID) -> Vec2 {
-	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		return body.transform.position
+get_position :: proc(world: ^World, entity_id: EntityID) -> Vec2 {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			return body.transform.position
+		}
 	}
 	return Vec2{}
 }
 
-get_velocity :: proc(nod: ^Nod, entity_id: EntityID) -> Vec2 {
-	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		vel := b2.Body_GetLinearVelocity(body.handle)
-		return {f64(vel.x), f64(vel.y)}
+get_velocity :: proc(world: ^World, entity_id: EntityID) -> Vec2 {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			vel := b2.Body_GetLinearVelocity(body.handle)
+			return {f64(vel.x), f64(vel.y)}
+		}
 	}
 	return Vec2{}
 }
 
-get_angular_velocity :: proc(nod: ^Nod, entity_id: EntityID) -> f32 {
-	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		return b2.Body_GetAngularVelocity(body.handle)
+get_angular_velocity :: proc(world: ^World, entity_id: EntityID) -> f32 {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			return b2.Body_GetAngularVelocity(body.handle)
+		}
 	}
 	return 0
 }
 
-get_contacts :: proc(nod: ^Nod, entity_id: EntityID, allocator := context.allocator) -> []Contact {
+get_contacts :: proc(
+	world: ^World,
+	entity_id: EntityID,
+	allocator := context.allocator,
+) -> []Contact {
 	contacts := make([dynamic]Contact, allocator)
-	for contact in nod.physics_world.contacts {
-		if contact.body_a == entity_id || contact.body_b == entity_id {
-			append(&contacts, contact)
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		for contact in physics_world.contacts {
+			if contact.body_a == entity_id || contact.body_b == entity_id {
+				append(&contacts, contact)
+			}
 		}
 	}
 	return contacts[:]
 }
 
-get_hits :: proc(nod: ^Nod, entity_id: EntityID, allocator := context.allocator) -> []Hit {
+get_hits :: proc(world: ^World, entity_id: EntityID, allocator := context.allocator) -> []Hit {
 	hits := make([dynamic]Hit, allocator)
-	for hit in nod.physics_world.hits {
-		if hit.body_a == entity_id || hit.body_b == entity_id {
-			append(&hits, hit)
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		for hit in physics_world.hits {
+			if hit.body_a == entity_id || hit.body_b == entity_id {
+				append(&hits, hit)
+			}
 		}
 	}
 	return hits[:]
 }
 
-get_body_mass :: proc(nod: ^Nod, entity_id: EntityID) -> f32 {
-	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		return b2.Body_GetMass(body.handle)
+get_body_mass :: proc(world: ^World, entity_id: EntityID) -> f32 {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			return b2.Body_GetMass(body.handle)
+		}
 	}
 	return 0
 }
 
-is_body_awake :: proc(nod: ^Nod, entity_id: EntityID) -> bool {
-	if body, ok := nod.physics_world.bodies[entity_id]; ok {
-		return b2.Body_IsAwake(body.handle)
+is_body_awake :: proc(world: ^World, entity_id: EntityID) -> bool {
+	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+		if body, ok := physics_world.bodies[entity_id]; ok {
+			return b2.Body_IsAwake(body.handle)
+		}
 	}
 	return false
 }
 
 
 // returns true if point is inside of capsule
-point_in_capsule :: proc(nod: ^Nod, id: ShapeID, point: Vec2) -> bool {
+point_in_capsule :: proc(id: ShapeID, point: Vec2) -> bool {
 	b2_shape := transmute(b2.ShapeId)u64(id)
 	capsule := b2.Shape_GetCapsule(b2_shape)
 	return b2.PointInCapsule({f32(point.x), f32(point.y)}, capsule)
 }
 
 // returns true if point is inside of circle
-point_in_circle :: proc(nod: ^Nod, id: ShapeID, point: Vec2) -> bool {
+point_in_circle :: proc(id: ShapeID, point: Vec2) -> bool {
 	b2_shape := transmute(b2.ShapeId)u64(id)
 	circle := b2.Shape_GetCircle(b2_shape)
 	return b2.PointInCircle({f32(point.x), f32(point.y)}, circle)
 }
 
 // returns true if point is inside of polygon
-point_in_polygon :: proc(nod: ^Nod, id: ShapeID, point: Vec2) -> bool {
+point_in_polygon :: proc(id: ShapeID, point: Vec2) -> bool {
 	b2_shape := transmute(b2.ShapeId)u64(id)
 	polygon := b2.Shape_GetPolygon(b2_shape)
 	return b2.PointInPolygon({f32(point.x), f32(point.y)}, polygon)

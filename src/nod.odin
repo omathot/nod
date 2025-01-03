@@ -19,7 +19,6 @@ Nod :: struct {
 
 	// core
 	is_running:            bool,
-	physics_world:         PhysicsWorld,
 	ecs_manager:           ECSManager,
 	// asset_manager: AssetManager
 	// audio_system: AudioSystem,
@@ -27,6 +26,7 @@ Nod :: struct {
 
 	// threading
 	physics_thread:        ^thread.Thread,
+	physics_thread_ctx:    ^PhysicsThreadContext,
 
 	// state n sync
 	state_buffer:          StateBuffer,
@@ -45,7 +45,6 @@ Nod :: struct {
 	fixed_update_game:     proc(_: rawptr, input_state: ^InputState),
 	frame_update_game:     proc(_: rawptr, input_state: ^InputState),
 	render_game:           proc(_: rawptr, nod: ^Nod, dt: f32),
-	should_quit:           proc(_: rawptr) -> bool,
 }
 
 
@@ -74,11 +73,6 @@ nod_init :: proc(config: NodConfig) -> (^Nod, NodError) {
 	nod.is_running = true
 	nod.ecs_manager.world = create_world()
 
-	if physics_world, err := get_resource(nod.ecs_manager.world.resources, PhysicsWorld);
-	   err == .None {
-		nod.physics_world = physics_world^
-	}
-	physics_init_world(&nod.physics_world)
 	init_threads(nod)
 
 	nod.window = window
@@ -107,12 +101,7 @@ nod_clean :: proc(nod: ^Nod) {
 		}
 
 		// threads
-		queue.destroy(&nod.command_queue.commands)
-		if nod.physics_thread != nil {
-			thread.destroy(nod.physics_thread)
-		}
-
-		physics_cleanup(&nod.physics_world)
+		cleanup_threads(nod)
 		sdl.Quit()
 		nod.is_running = false
 		free(nod)
@@ -234,8 +223,7 @@ fixed_update :: proc(nod: ^Nod) {
 	}
 
 	// quit event check
-	if input.quit_request ||
-	   (nod.should_quit != nil && nod.game != nil && nod.should_quit(nod.game)) {
+	if input.quit_request {
 		fmt.println("Received quit event")
 		nod.is_running = false
 		return
