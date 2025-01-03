@@ -19,4 +19,8 @@ ecs :
 
 test : 
 	@mkdir -p bin/tests
-	odin test tests -collection:lib=lib -out:bin/tests/test
+	odin test tests -collection:lib=lib -out:bin/tests/test -debug -sanitize:address
+
+user :
+	@mkdir -p bin/user
+	odin run example/ --collection:lib=lib -out:bin/user/user

@@ -1,5 +1,6 @@
 package nod
 
+import "core:container/queue"
 import "core:fmt"
 import "core:hash"
 import "core:mem"
@@ -53,34 +54,63 @@ create_world :: proc() -> ^World {
 	world.free_entities = make([dynamic]EntityID)
 	world.entity_to_archetype = make(map[EntityID]u64)
 	world.system_map = make(map[SystemID]^System)
-	world.input_state = new(InputState)
+
+	world.resources = create_resources()
+
+	input_state := new(InputState)
+	init_input_state(input_state)
+	insert_resource(world.resources, InputState, input_state^)
+	free(input_state)
+
+	physics_world: PhysicsWorld
+	physics_init_world(&physics_world)
+	insert_resource(world.resources, PhysicsWorld, physics_world)
+
+	insert_resource(
+		world.resources,
+		TimeResource,
+		TimeResource{delta_time = 0, total_time = 0, fixed_delta = f32(FIXED_DT)},
+	)
+
 	return world
 }
 
 destroy_world :: proc(world: ^World) {
-	// components
-	for archetype_id, columns in world.columns {
-		for _, column in columns {
-			free(column.data)
+	if world != nil {
+		// Clean up input state
+		if input_state, err := get_resource(world.resources, InputState); err == .None {
+			cleanup_input_state(input_state)
 		}
-		delete(columns)
+		destroy_resources(world.resources)
+		// if world.input_state != nil {
+		// 	cleanup_input_state(world.input_state)
+		// 	free(world.input_state)
+		// }
+
+		// components
+		for archetype_id, columns in world.columns {
+			for _, column in columns {
+				free(column.data)
+			}
+			delete(columns)
+		}
+		delete(world.columns)
+
+		// archetypes
+		for _, archetype in &world.archetypes {
+			delete(archetype.entities)
+		}
+		delete(world.archetypes)
+
+		// rest
+		delete(world.systems)
+		delete(world.free_entities)
+		delete(world.entity_to_archetype)
+		delete(world.system_map)
+
+		free(world)
+
 	}
-	delete(world.columns)
-
-	// archetypes
-	for _, archetype in &world.archetypes {
-		delete(archetype.entities)
-	}
-	delete(world.archetypes)
-
-	// rest
-	delete(world.systems)
-	delete(world.free_entities)
-	delete(world.entity_to_archetype)
-	delete(world.system_map)
-	free(world.input_state)
-
-	free(world)
 }
 
 
@@ -138,6 +168,7 @@ create_entity :: proc(world: ^World) -> EntityID {
 }
 
 destroy_entity :: proc(world: ^World, entity: EntityID) {
+	// remove from archetype
 	if archetype_id, ok := world.entity_to_archetype[entity]; ok {
 		archetype := &world.archetypes[archetype_id]
 		for i := 0; i < len(archetype.entities); i += 1 {
@@ -147,6 +178,11 @@ destroy_entity :: proc(world: ^World, entity: EntityID) {
 			}
 		}
 		delete_key(&world.entity_to_archetype, entity) // update lookup
+	}
+	if world.resources != nil {
+		if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
+			destroy_physics_body(physics_world, entity)
+		}
 	}
 	append_elem(&world.free_entities, entity)
 }
@@ -369,7 +405,10 @@ get_component_typed :: proc(
 }
 
 get_input :: proc(world: ^World) -> ^InputState {
-	return world.input_state
+	if input, err := get_resource(world.resources, InputState); err == .None {
+		return input
+	}
+	return nil
 }
 
 

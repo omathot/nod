@@ -58,7 +58,7 @@ World :: struct {
 	systems:             [dynamic]System,
 
 	// Queriable resources
-	input_state:         ^InputState,
+	resources:           ^Resources,
 }
 
 

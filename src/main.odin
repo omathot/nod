@@ -1,6 +1,7 @@
 package nod
 
 import "core:fmt"
+import "core:mem"
 import "core:os"
 
 import imgui "lib:odin-imgui"
@@ -19,7 +20,7 @@ Game :: struct {
 
 display_game :: proc(game_ptr: rawptr, nod: ^Nod, interpolation: f32) {
 	game := cast(^Game)game_ptr
-	draw_sprite(&nod.renderer, game.sprite.texture, game.s_rect, game.d_rect)
+	draw_sprite(&nod.renderer, game.sprite.texture.handle, game.s_rect, game.d_rect)
 }
 
 game_update :: proc(game_ptr: rawptr, input_state: ^InputState) {
@@ -40,11 +41,14 @@ init_test :: proc(game: ^Game, renderer: ^Renderer) {
 	game.running = false
 	game.next_game_tick = sdl.GetTicks()
 
-	game.sprite = Sprite {
-		texture     = sdl_img.LoadTexture(renderer.handle, "./assets/Hero_01.png"),
-		source_rect = game.s_rect,
-		layer       = 0,
+	if texture, ok := create_texture(renderer, "./assets/Hero_01.png"); ok == .None {
+		game.sprite = create_sprite(texture)
 	}
+	// game.sprite = Sprite {
+	// 	texture     = sdl_img.LoadTexture(renderer.handle, "./assets/Hero_01.png"),
+	// 	source_rect = game.s_rect,
+	// 	layer       = 0,
+	// }
 
 }
 
@@ -209,6 +213,15 @@ physics_test_should_quit :: proc(game_ptr: rawptr) -> bool {
 }
 
 physics_test :: proc() {
+	track: mem.Tracking_Allocator
+	mem.tracking_allocator_init(&track, context.allocator)
+	context.allocator = mem.tracking_allocator(&track)
+	defer {
+		for _, leak in track.allocation_map {
+			fmt.printfln("%v leaked %v bytes", leak.location, leak.size)
+		}
+		mem.tracking_allocator_destroy(&track)
+	}
 	fmt.println("Starting physics test initialization")
 
 	nod, err := nod_init(

@@ -1,6 +1,5 @@
 package nod
 
-import sdl "vendor:sdl2"
 
 Rect :: struct {
 	x, y: int,
@@ -26,11 +25,6 @@ Transform :: struct {
 	scale:    Vec2,
 }
 
-Sprite :: struct {
-	texture:     ^sdl.Texture,
-	source_rect: Rect,
-	layer:       int,
-}
 
 RigidBody :: struct {
 	velocity:     Vec2,

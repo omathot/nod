@@ -19,6 +19,7 @@ cd nod
 make - opens a window, renders a sprite and prints time
 make physics - print box coordinates falling till ground
 make ecs - moves a box smoothly across, catches user input
+make test - run test suites using nod as a user
 
 ```
 

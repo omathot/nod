@@ -54,6 +54,19 @@ InputEventType :: enum {
 	MouseScroll,
 }
 
+init_input_state :: proc(input: ^InputState) {
+	queue.init(&input.event_buffer)
+	input.fixed_timestep = 1.0 / 60.0
+	input.last_update_time = 0
+	input.quit_request = false
+}
+
+cleanup_input_state :: proc(input: ^InputState) {
+	if input != nil {
+		queue.destroy(&input.event_buffer)
+	}
+}
+
 update_input :: proc(input: ^InputState) {
 	current_time := sdl.GetTicks()
 

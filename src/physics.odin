@@ -14,7 +14,7 @@ PhysicsWorld :: struct {
 	gravity:  Vec2,
 }
 
-// @(private)
+@(private)
 physics_init_world :: proc(world: ^PhysicsWorld, gravity: Vec2 = {0.0, -9.81}) {
 	def_world := b2.DefaultWorldDef()
 	def_world.gravity = {f32(gravity.x), f32(gravity.y)}
@@ -26,8 +26,10 @@ physics_init_world :: proc(world: ^PhysicsWorld, gravity: Vec2 = {0.0, -9.81}) {
 	world.hits = make([dynamic]Hit)
 }
 
-// @(private)
+@(private)
 physics_cleanup :: proc(world: ^PhysicsWorld) {
+	if world == nil do return
+
 	for _, body in world.bodies {
 		for shape in body.shapes {
 			b2.DestroyShape(transmute(b2.ShapeId)u64(shape))
@@ -102,7 +104,8 @@ physics_update :: proc(world: ^PhysicsWorld, dt: f32) {
 // 	process_contacts_and_hits(world)
 // }
 
-// @(private)
+
+@(private)
 process_contacts_and_hits :: proc(world: ^PhysicsWorld) {
 	clear(&world.hits)
 	contact_events := b2.World_GetContactEvents(world.handle)
@@ -136,7 +139,7 @@ process_contacts_and_hits :: proc(world: ^PhysicsWorld) {
 
 }
 
-// @(private)
+@(private)
 physics_cache :: proc(world: ^PhysicsWorld) {
 	for _, &body in world.bodies {
 		body.prev_transform = body.transform
@@ -265,6 +268,18 @@ add_capsule_collider :: proc(
 	}
 
 	return ShapeID(0)
+}
+
+destroy_physics_body :: proc(world: ^PhysicsWorld, entity_id: EntityID) {
+	if body, ok := world.bodies[entity_id]; ok {
+		for shape in body.shapes {
+			b2.DestroyShape(transmute(b2.ShapeId)u64(shape))
+		}
+
+		delete(body.shapes)
+		b2.DestroyBody(body.handle)
+		delete_key(&world.bodies, entity_id)
+	}
 }
 
 

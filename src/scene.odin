@@ -1,13 +1,21 @@
 package nod
 
-import "core:encoding/json" // serialize scnees to json and re construct from json
-import "core:fmt"
+// Scene :: struct {
+// 	// Just entity/component data
+// 	entities: map[EntityID]SceneEntityData,
+// 	name:     string,
+// }
 
+// SceneEntityData :: struct {
+// 	name:       string,
+// 	components: map[ComponentID][]byte, // Serialized component data
+// }
 
-// what's needed in a scene?
-// need to be able to reconstruct a scene from the serialized information
-Scene :: struct {
-	entities: [dynamic]EntityID,
-	systems:  [dynamic]SystemID,
-}
+// serialize_world_to_scene :: proc(world: ^World, entity_filter: []EntityID = nil) -> Scene {
+// 	// Create a snapshot of current world state
+// }
+
+// load_scene_into_world :: proc(world: ^World, scene: Scene) {
+// 	// Instantiate entities and components from scene data
+// }
 

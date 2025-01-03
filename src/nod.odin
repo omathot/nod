@@ -2,6 +2,7 @@ package nod
 
 import "core:container/queue"
 import "core:fmt"
+import "core:mem"
 import "core:sync"
 import "core:thread"
 import b2 "vendor:box2d"
@@ -9,7 +10,8 @@ import sdl "vendor:sdl2"
 
 
 TICKS_PER_SECOND :: 60
-MAX_FRAMESKIP :: 6 // sqrt(TICKS_PER_SECOND)
+// MAX_FRAMESKIP :: 6 // sqrt(TICKS_PER_SECOND)
+FIXED_DT := 1.0 / f64(TICKS_PER_SECOND) // ~16.67ms
 
 Nod :: struct {
 	window:                Window,
@@ -71,6 +73,11 @@ nod_init :: proc(config: NodConfig) -> (^Nod, NodError) {
 
 	nod.is_running = true
 	nod.ecs_manager.world = create_world()
+
+	if physics_world, err := get_resource(nod.ecs_manager.world.resources, PhysicsWorld);
+	   err == .None {
+		nod.physics_world = physics_world^
+	}
 	physics_init_world(&nod.physics_world)
 	init_threads(nod)
 
@@ -81,19 +88,22 @@ nod_init :: proc(config: NodConfig) -> (^Nod, NodError) {
 
 nod_clean :: proc(nod: ^Nod) {
 	if nod != nil {
+		if nod.game != nil {
+			// not allocated rn its just tests, probably add for real games
+			// free(nod.game)
+		}
+		// Clean up input system
+		// if nod.ecs_manager.world != nil && nod.ecs_manager.world.input_state != nil {
+		// queue.destroy(&nod.ecs_manager.world.input_state.event_buffer)
+		// }
+		if nod.ecs_manager.world != nil {
+			destroy_world(nod.ecs_manager.world)
+		}
 		if nod.window.handle != nil {
 			sdl.DestroyWindow(nod.window.handle)
 		}
 		if nod.renderer.handle != nil {
 			sdl.DestroyRenderer(nod.renderer.handle)
-		}
-		if nod.game != nil {
-			// not allocated rn its just tests, probably add for real games
-			// free(nod.game)
-		}
-		if nod.ecs_manager.world != nil {
-			queue.destroy(&nod.ecs_manager.world.input_state.event_buffer)
-			destroy_world(nod.ecs_manager.world)
 		}
 
 		// threads
@@ -111,13 +121,15 @@ nod_clean :: proc(nod: ^Nod) {
 }
 
 nod_run :: proc(nod: ^Nod) {
+	track: mem.Tracking_Allocator
+	mem.tracking_allocator_init(&track, context.allocator)
+	context.allocator = mem.tracking_allocator(&track)
+	defer alloc_clean(&track)
 	nod.performance_frequency = f64(sdl.GetPerformanceFrequency())
 	nod.prev_counter = f64(sdl.GetPerformanceCounter())
 	nod.current_time = nod.prev_counter / nod.performance_frequency
 	accumulator := f64(0)
 	nod.is_running = true
-
-	FIXED_DT := 1.0 / f64(TICKS_PER_SECOND) // ~16.67ms
 
 
 	for nod.is_running {
@@ -131,9 +143,24 @@ nod_run :: proc(nod: ^Nod) {
 
 		nod.current_time += frame_time
 		nod.delta_time = frame_time
+		// update time resource
+		if time_res, err := get_resource(nod.ecs_manager.world.resources, TimeResource);
+		   err == .None {
+			time_res.delta_time = f32(frame_time)
+			time_res.total_time += time_res.delta_time
+		}
 
-		update_input(nod.ecs_manager.world.input_state)
-		if nod.ecs_manager.world.input_state.quit_request {
+		input: ^InputState
+		if inp, err := get_resource(nod.ecs_manager.world.resources, InputState); err == .None {
+			input = inp
+		} else {
+			fmt.eprintln("Failed to get input state resource")
+			nod.is_running = false
+			break
+		}
+
+		update_input(input)
+		if input.quit_request {
 			nod.is_running = false
 			push_command(&nod.command_queue, Command{type = .Quit})
 			break
@@ -141,8 +168,8 @@ nod_run :: proc(nod: ^Nod) {
 
 		accumulator += frame_time
 		loops := 0
-		for accumulator > FIXED_DT && loops < MAX_FRAMESKIP {
-			process_fixed_update(nod.ecs_manager.world.input_state)
+		for accumulator > FIXED_DT { 	// && loops < MAX_FRAMESKIP
+			process_fixed_update(input)
 			// update game world
 			fixed_update(nod)
 
@@ -198,10 +225,18 @@ render :: proc(nod: ^Nod, interpolation: f32) {
 // 	}
 // }
 fixed_update :: proc(nod: ^Nod) {
+	input: ^InputState
+	if inp, err := get_resource(nod.ecs_manager.world.resources, InputState); err == .None {
+		input = inp
+	} else {
+		fmt.eprintln("Failed to get InputState Resource")
+		nod.is_running = false
+	}
+
 	// quit event check
-	if nod.ecs_manager.world.input_state.quit_request ||
+	if input.quit_request ||
 	   (nod.should_quit != nil && nod.game != nil && nod.should_quit(nod.game)) {
-		fmt.println("received quit event")
+		fmt.println("Received quit event")
 		nod.is_running = false
 		return
 	}
@@ -211,7 +246,7 @@ fixed_update :: proc(nod: ^Nod) {
 
 	// user's game logic
 	if nod.fixed_update_game != nil && nod.game != nil {
-		nod.fixed_update_game(nod.game, nod.ecs_manager.world.input_state)
+		nod.fixed_update_game(nod.game, input)
 	}
 }
 
@@ -223,7 +258,12 @@ fixed_update :: proc(nod: ^Nod) {
 // - Visual effects
 variable_update :: proc(nod: ^Nod) {
 	if nod.frame_update_game != nil && nod.game != nil {
-		nod.frame_update_game(nod.game, nod.ecs_manager.world.input_state)
+		if input, err := get_resource(nod.ecs_manager.world.resources, InputState); err == .None {
+			nod.frame_update_game(nod.game, input)
+		} else {
+			fmt.eprintln("Failed to get InputState Resource")
+			nod.is_running = false
+		}
 	}
 }
 
