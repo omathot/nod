@@ -14,7 +14,7 @@ PhysicsWorld :: struct {
 	gravity:  Vec2,
 }
 
-@(private)
+// @(private)
 physics_init_world :: proc(world: ^PhysicsWorld, gravity: Vec2 = {0.0, -9.81}) {
 	def_world := b2.DefaultWorldDef()
 	def_world.gravity = {f32(gravity.x), f32(gravity.y)}
@@ -26,7 +26,7 @@ physics_init_world :: proc(world: ^PhysicsWorld, gravity: Vec2 = {0.0, -9.81}) {
 	world.hits = make([dynamic]Hit)
 }
 
-@(private)
+// @(private)
 physics_cleanup :: proc(world: ^PhysicsWorld) {
 	for _, body in world.bodies {
 		for shape in body.shapes {
@@ -41,7 +41,7 @@ physics_cleanup :: proc(world: ^PhysicsWorld) {
 	b2.DestroyWorld(world.handle)
 }
 
-@(private)
+// @(private)
 physics_update :: proc(world: ^PhysicsWorld, dt: f32) {
 	// cache
 	physics_cache(world)
@@ -102,7 +102,7 @@ physics_update :: proc(world: ^PhysicsWorld, dt: f32) {
 // 	process_contacts_and_hits(world)
 // }
 
-@(private)
+// @(private)
 process_contacts_and_hits :: proc(world: ^PhysicsWorld) {
 	clear(&world.hits)
 	contact_events := b2.World_GetContactEvents(world.handle)
@@ -136,7 +136,7 @@ process_contacts_and_hits :: proc(world: ^PhysicsWorld) {
 
 }
 
-@(private)
+// @(private)
 physics_cache :: proc(world: ^PhysicsWorld) {
 	for _, &body in world.bodies {
 		body.prev_transform = body.transform
@@ -232,6 +232,38 @@ add_circle_collider :: proc(
 		append(&body.shapes, shape_wrap)
 		return shape_wrap
 	}
+	return ShapeID(0)
+}
+
+add_capsule_collider :: proc(
+	nod: ^Nod,
+	entity_id: EntityID,
+	center1: f32,
+	center2: f32,
+	radius: f32,
+	density: f32 = 1.0,
+	friction: f32 = 0.3,
+	is_sensor: bool,
+) -> ShapeID {
+	if body, ok := &nod.physics_world.bodies[entity_id]; ok {
+		shape_def := b2.DefaultShapeDef()
+		shape_def.density = density
+		shape_def.friction = friction
+		shape_def.isSensor = is_sensor
+
+		capsule := b2.Capsule {
+			center1 = center1,
+			center2 = center2,
+			radius  = radius,
+		}
+
+		shape_id := b2.CreateCapsuleShape(body.handle, shape_def, capsule)
+		shape_wrap := ShapeID(transmute(u64)shape_id)
+
+		append(&body.shapes, shape_wrap)
+		return shape_wrap
+	}
+
 	return ShapeID(0)
 }
 
@@ -356,6 +388,31 @@ is_body_awake :: proc(nod: ^Nod, entity_id: EntityID) -> bool {
 	}
 	return false
 }
+
+
+// returns true if point is inside of capsule
+point_in_capsule :: proc(nod: ^Nod, id: ShapeID, point: Vec2) -> bool {
+	b2_shape := transmute(b2.ShapeId)u64(id)
+	capsule := b2.Shape_GetCapsule(b2_shape)
+	return b2.PointInCapsule({f32(point.x), f32(point.y)}, capsule)
+}
+
+// returns true if point is inside of circle
+point_in_circle :: proc(nod: ^Nod, id: ShapeID, point: Vec2) -> bool {
+	b2_shape := transmute(b2.ShapeId)u64(id)
+	circle := b2.Shape_GetCircle(b2_shape)
+	return b2.PointInCircle({f32(point.x), f32(point.y)}, circle)
+}
+
+// returns true if point is inside of polygon
+point_in_polygon :: proc(nod: ^Nod, id: ShapeID, point: Vec2) -> bool {
+	b2_shape := transmute(b2.ShapeId)u64(id)
+	polygon := b2.Shape_GetPolygon(b2_shape)
+	return b2.PointInPolygon({f32(point.x), f32(point.y)}, polygon)
+}
+
+// shape_distance :: proc(nod: ^Nod, src: ShapeID, dst: ShapeID) -> f32 {
+// }
 
 // JOINTS
 

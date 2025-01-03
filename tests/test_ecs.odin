@@ -101,3 +101,34 @@ iterate_query :: proc(t: ^test.T) {
 	test.expectf(t, count == 3, "Expected 3 entities with component, found %d", count)
 }
 
+@(test)
+get_input_through_ecs_system :: proc(t: ^test.T) {
+	world := nod.create_world()
+	defer nod.destroy_world(world)
+
+	inputs := nod.get_input(world)
+	test.expect(t, inputs != nil, "Failed to fetch inputs from world")
+}
+
+
+system_test :: proc(world: ^nod.World, dt: f32) {
+	log.info("Hello from system! :)")
+}
+
+@(test)
+add_system_to_world :: proc(t: ^test.T) {
+	world := nod.create_world()
+	defer nod.destroy_world(world)
+
+	component_id := nod.register_component(world, TestComponent)
+	c_test := TestComponent {
+		v = 20,
+	}
+
+	required := bit_set[0 ..= nod.MAX_COMPONENTS]{}
+	required += {int(component_id)}
+	// for this to get called nod needs to be init, fixed_update() calls the system update functions
+	nod.system_add(world, "test", required, system_test)
+	// nod.system
+}
+
