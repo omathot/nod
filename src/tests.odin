@@ -4,6 +4,10 @@ import "core:fmt"
 import "core:mem"
 import sdl "vendor:sdl2"
 
+PIXELS_PER_METER :: 100.0
+WALL_THICKNESS_PIXELS :: 20.0 // For rendering
+WALL_THICKNESS_METERS :: WALL_THICKNESS_PIXELS / PIXELS_PER_METER // For physics
+
 PhysicsTest :: struct {
 	running:       bool,
 	player_entity: EntityID,
@@ -20,46 +24,25 @@ physics_movement_system :: proc(world: ^World, dt: f32) {
 
 	// Get player entity from Resource since we can't pass it directly to the system
 	if physics_state, err := get_resource(world.resources, PhysicsTest); err == .None {
-		// Apply forces based on input
-		if is_key_pressed(input, .W) {
-			fmt.println("!Applying impulse")
-			pos := get_position(world, physics_state.player_entity)
-			apply_impulse(world, physics_state.player_entity, {0, -200}, {pos.x, pos.y - 100})
-		}
-		if is_key_held(input, .S) {
-			apply_impulse(
-				world,
-				physics_state.player_entity,
-				{0, 200},
-				get_position(world, physics_state.player_entity),
-			)
-		}
-		if is_key_held(input, .A) {
-			apply_impulse(
-				world,
-				physics_state.player_entity,
-				{-200, 0},
-				get_position(world, physics_state.player_entity),
-			)
-		}
-		if is_key_held(input, .D) {
-			apply_impulse(
-				world,
-				physics_state.player_entity,
-				{200, 0},
-				get_position(world, physics_state.player_entity),
-			)
-		}
+		pos := get_position(world, physics_state.player_entity)
+		impulse_strength := f64(500.0 * PIXELS_PER_METER)
+		force_strength := f64(50000.0 * PIXELS_PER_METER)
 
-		// // Process collisions
-		// contacts := get_contacts(world, physics_state.player_entity)
-		// defer delete(contacts)
-
-		// for contact in contacts {
-		// 	if contact.state == .Begin {
-		// 		fmt.println("Collision detected!")
-		// 	}
-		// }
+		if is_key_pressed(input, .S) || is_key_held(input, .S) {
+			apply_force(world, physics_state.player_entity, {0, force_strength}, pos)
+			// apply_impulse(world, physics_state.player_entity, {0, impulse_strength}, pos)
+		}
+		if is_key_pressed(input, .A) || is_key_held(input, .A) {
+			apply_force(world, physics_state.player_entity, {-force_strength, 0}, pos)
+			// apply_impulse(world, physics_state.player_entity, {-impulse_strength, 0}, pos)
+		}
+		if is_key_pressed(input, .D) | is_key_held(input, .D) {
+			apply_force(world, physics_state.player_entity, {force_strength, 0}, pos)
+			// apply_impulse(world, physics_state.player_entity, {impulse_strength, 0}, pos)
+		}
+		if is_key_pressed(input, .SPACE) {
+			apply_impulse(world, physics_state.player_entity, {0, -impulse_strength}, pos)
+		}
 	}
 }
 
@@ -75,7 +58,16 @@ create_wall :: proc(
 	// Add static physics body
 	body := add_rigid_body(world, wall, .Static, pos)
 	if body != nil {
-		add_box_collider(world, wall, f32(size.x / 2), f32(size.y / 2), 1.0, 0.3, false)
+		// Don't scale the collider size - we want it to match screen coordinates
+		add_box_collider(
+			world,
+			wall,
+			f32(size.x / 2), // Use full pixel sizes
+			f32(size.y / 2),
+			0.0,
+			0.3,
+			false,
+		)
 	}
 
 	// Add transform for rendering
@@ -90,7 +82,7 @@ create_wall :: proc(
 	sprite := SpriteComponent {
 		texture = game^.test_texture,
 		rect    = Rect{0, 0, int(size.x), int(size.y)},
-		color   = {128, 128, 128, 255}, // Gray color for walls
+		color   = {128, 128, 128, 255},
 		z_index = 0,
 	}
 	add_component(world, wall, sprite_component_id, &sprite)
@@ -133,7 +125,7 @@ init_physics_test :: proc(game: ^PhysicsTest, nod: ^Nod) {
 	}
 
 	// Set gravity
-	set_gravity(nod.ecs_manager.world, {0, 500}) // Positive Y is down
+	set_gravity(nod.ecs_manager.world, {0, 9.81 * PIXELS_PER_METER}) // Positive Y is down
 
 	// Create player entity
 	game^.player_entity = create_entity(nod.ecs_manager.world)
@@ -141,12 +133,12 @@ init_physics_test :: proc(game: ^PhysicsTest, nod: ^Nod) {
 	// Add dynamic physics body to player
 	player_body := add_rigid_body(nod.ecs_manager.world, game^.player_entity, .Dynamic, {400, 300})
 	if player_body != nil {
-		add_box_collider(nod.ecs_manager.world, game^.player_entity, 25, 25, 1.0, 0.3, false)
-		set_linear_damping(nod.ecs_manager.world, game^.player_entity, 0.5) // Add some drag
+		add_box_collider(nod.ecs_manager.world, game^.player_entity, 25, 25, 0.1, 0.3, false)
+		// set_linear_damping(nod.ecs_manager.world, game^.player_entity, 0.5) // Add some drag
 	}
 
 	player_transform := Transform {
-		position = {400, 300},
+		position = {400, 100},
 		rotation = 0,
 		scale    = {1, 1},
 	}
@@ -165,45 +157,15 @@ init_physics_test :: proc(game: ^PhysicsTest, nod: ^Nod) {
 	}
 	add_component(nod.ecs_manager.world, game^.player_entity, sprite_component_id, &player_sprite)
 
-	// Create walls
-	wall_thickness := f64(20)
-
-	// Top wall
-	game^.wall_entities[0] = create_wall(
+	FLOOR_THICKNESS :: 20.0
+	floor := create_wall(
 		game,
 		nod.ecs_manager.world,
-		{400, wall_thickness / 2},
-		{800, wall_thickness},
+		{400, 550}, // Position near bottom of screen
+		{10000, FLOOR_THICKNESS}, // Full width, modest thickness
 		true,
 	)
-
-	// Right wall
-	game^.wall_entities[1] = create_wall(
-		game,
-		nod.ecs_manager.world,
-		{800 - wall_thickness / 2, 300},
-		{wall_thickness, 600},
-		false,
-	)
-
-	// Bottom wall
-	game^.wall_entities[2] = create_wall(
-		game,
-		nod.ecs_manager.world,
-		{400, 600 - wall_thickness / 2},
-		{800, wall_thickness},
-		true,
-	)
-
-	// Left wall
-	game^.wall_entities[3] = create_wall(
-		game,
-		nod.ecs_manager.world,
-		{wall_thickness / 2, 300},
-		{wall_thickness, 600},
-		false,
-	)
-
+	game^.wall_entities[0] = floor
 	// Add movement system
 	system_add(nod.ecs_manager.world, "Physics Movement", {}, physics_movement_system)
 
