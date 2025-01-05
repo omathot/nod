@@ -93,6 +93,7 @@ update_input :: proc(input: ^InputState) {
 	input.last_update_time = current_time
 }
 
+
 process_fixed_update :: proc(input: ^InputState) {
 	input.fixed_state.prev_keyboard = input.fixed_state.keyboard
 	input.fixed_state.prev_mouse = input.fixed_state.mouse

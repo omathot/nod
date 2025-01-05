@@ -60,6 +60,9 @@ World :: struct {
 	// systems
 	systems:             [dynamic]System,
 
+	// job system
+	job_system:          ^JobSystem,
+
 	// Queriable resources
 	resources:           ^Resources,
 }

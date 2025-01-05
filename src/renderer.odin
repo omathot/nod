@@ -1,6 +1,7 @@
 package nod
 
 // import "core:fmt"
+import "core:math"
 import "core:slice"
 import sdl "vendor:sdl2"
 
@@ -39,7 +40,7 @@ camera_system :: proc(world: ^World) {
 	}
 }
 
-sprite_render_system :: proc(world: ^World, renderer: ^Renderer) {
+sprite_render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
 	// 	fmt.println("Setting Sprite rendering")
 	required := bit_set[0 ..= MAX_COMPONENTS]{}
 	required += {int(sprite_component_id), int(transform_component_id)}
@@ -75,14 +76,37 @@ sprite_render_system :: proc(world: ^World, renderer: ^Renderer) {
 		return a.z_index < b.z_index
 	})
 
+	// get physics world for interpolation
+	physics_world, err := get_resource(world.resources, PhysicsWorld)
 	// render 
 	for entry in sprites {
 		sprite, _ := get_component_typed(world, entry.entity, sprite_component_id, SpriteComponent)
 		transform, _ := get_component_typed(world, entry.entity, transform_component_id, Transform)
+		pos := transform.position
+		if err == .None {
+			if body, has_body := physics_world.bodies[entry.entity]; has_body {
+				pos = Vec2 {
+					x = f64(
+						math.lerp(
+							f32(body.prev_transform.position.x),
+							f32(body.transform.position.x),
+							alpha,
+						),
+					),
+					y = f64(
+						math.lerp(
+							f32(body.prev_transform.position.y),
+							f32(body.transform.position.y),
+							alpha,
+						),
+					),
+				}
+			}
+		}
 		// screen position relative to camera
 		dest := Rect {
-			x = int(transform.position.x - f64(sprite.rect.w) / 2 * transform.scale.x),
-			y = int(transform.position.y - f64(sprite.rect.h) / 2 * transform.scale.y),
+			x = int(pos.x - f64(sprite.rect.w) / 2 * transform.scale.x),
+			y = int(pos.y - f64(sprite.rect.h) / 2 * transform.scale.y),
 			w = int(f64(sprite.rect.w) * transform.scale.x),
 			h = int(f64(sprite.rect.h) * transform.scale.y),
 		}
@@ -117,9 +141,7 @@ sprite_render_system :: proc(world: ^World, renderer: ^Renderer) {
 }
 
 // main system, coordinates all others
-render_system :: proc(world: ^World, renderer: ^Renderer) {
-	// 	fmt.println("\nStarting render frame")
-
+render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
 	// clear screen
 	sdl.SetRenderDrawColor(renderer.handle, 0, 0, 0, 255)
 	sdl.RenderClear(renderer.handle)
@@ -128,7 +150,7 @@ render_system :: proc(world: ^World, renderer: ^Renderer) {
 	camera_system(world)
 
 	// 	fmt.println("Running sprite system...")
-	sprite_render_system(world, renderer)
+	sprite_render_system(world, renderer, alpha)
 
 	// 	fmt.println("Present renderer...")
 	sdl.RenderPresent(renderer.handle)

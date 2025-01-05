@@ -3,15 +3,17 @@ package nod
 import "core:c"
 import "core:fmt"
 import "core:math"
+import "core:sync"
 import b2 "vendor:box2d"
 
 PhysicsWorld :: struct {
-	handle:   b2.WorldId,
-	bodies:   map[EntityID]PhysicsBody,
-	contacts: [dynamic]Contact,
-	hits:     [dynamic]Hit,
+	handle:       b2.WorldId,
+	bodies:       map[EntityID]PhysicsBody,
+	contacts:     [dynamic]Contact,
+	hits:         [dynamic]Hit,
+	state_buffer: StateBuffer,
 	// joints:   [dynamic]PhysicsJoint,    not implemented yet
-	gravity:  Vec2,
+	gravity:      Vec2,
 }
 
 @(private)
@@ -43,67 +45,38 @@ physics_cleanup :: proc(world: ^PhysicsWorld) {
 	b2.DestroyWorld(world.handle)
 }
 
-// @(private)
-physics_update :: proc(world: ^PhysicsWorld, dt: f32) {
-	// cache
-	physics_cache(world)
+physics_update_job :: proc(data: rawptr) {
+	physics_data := cast(^PhysicsUpdateData)data
 
-	// changed from 4 to 8 for better simulation
+	physics_cache(physics_data.world)
+
+	// changed from 4 to 8 for better simulation with ~16ms frame
 	sub_steps: c.int = 8
-	b2.World_Step(world.handle, dt, sub_steps)
+	b2.World_Step(physics_data.world.handle, physics_data.dt, sub_steps)
 
 	// get new contacts/hits
-	process_contacts_and_hits(world)
-
+	process_contacts_and_hits(physics_data.world)
 }
-// !!DEBUG Function
-// physics_update :: proc(world: ^PhysicsWorld, dt: f32) {
-// 	fmt.println("\nPhysics Update:")
-// 	fmt.println("dt:", dt)
 
-// 	// Check gravity
-// 	gravity := b2.World_GetGravity(world.handle)
-// 	fmt.printf("Current gravity: (%.2f, %.2f)\n", gravity.x, gravity.y)
 
-// 	// Check body states before step
-// 	fmt.println("\nPre-step body states:")
-// 	for id, body in world.bodies {
-// 		// Get full body state
-// 		pos := b2.Body_GetPosition(body.handle)
-// 		vel := b2.Body_GetLinearVelocity(body.handle)
-// 		ang_vel := b2.Body_GetAngularVelocity(body.handle)
-// 		is_awake := b2.Body_IsAwake(body.handle)
-// 		body_type := b2.Body_GetType(body.handle)
+// @(private)
+physics_update :: proc(world: ^World, p_world: ^PhysicsWorld, dt: f32) {
+	completion := sync.Sema{}
+	update_data := PhysicsUpdateData {
+		world      = p_world,
+		dt         = dt,
+		completion = &completion,
+	}
 
-// 		fmt.printf("Body %d:\n", id)
-// 		fmt.printf("  type=%v\n", body_type)
-// 		fmt.printf("  pos=(%.2f, %.2f)\n", pos.x, pos.y)
-// 		fmt.printf("  vel=(%.2f, %.2f)\n", vel.x, vel.y)
-// 		fmt.printf("  ang_vel=%.2f\n", ang_vel)
-// 		fmt.printf("  awake=%v\n", is_awake)
-// 	}
+	job := Job {
+		procedure  = physics_update_job,
+		data       = &update_data,
+		completion = &completion,
+	}
 
-// 	// Cache previous state
-// 	physics_cache(world)
-
-// 	// Fixed values
-// 	sub_steps: c.int = 4
-
-// 	fmt.println("\nCalling World_Step...")
-// 	b2.World_Step(world.handle, dt, sub_steps)
-// 	fmt.println("World step complete")
-
-// 	// Debug state after step
-// 	fmt.println("\nPost-step body states:")
-// 	for id, body in world.bodies {
-// 		pos := b2.Body_GetPosition(body.handle)
-// 		vel := b2.Body_GetLinearVelocity(body.handle)
-// 		fmt.printf("Body %d: pos=(%.2f, %.2f), vel=(%.2f, %.2f)\n", id, pos.x, pos.y, vel.x, vel.y)
-// 	}
-
-// 	process_contacts_and_hits(world)
-// }
-
+	schedule_job(world.job_system, job)
+	sync.sema_wait(&completion)
+}
 
 @(private)
 process_contacts_and_hits :: proc(world: ^PhysicsWorld) {
@@ -204,7 +177,7 @@ add_box_collider :: proc(
 	is_sensor: bool,
 ) -> ShapeID {
 	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
-		if body, ok := &physics_world.bodies[entity_id]; ok { // need to take the pointer of here otherwise leak 64 bytes
+		if body, ok := &physics_world.bodies[entity_id]; ok { 	// need to take the pointer of here otherwise leak 64 bytes
 
 			box := b2.MakeBox(half_width, half_height)
 			shape_def := b2.DefaultShapeDef()

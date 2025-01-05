@@ -21,13 +21,10 @@ physics_movement_system :: proc(world: ^World, dt: f32) {
 	// Get player entity from Resource since we can't pass it directly to the system
 	if physics_state, err := get_resource(world.resources, PhysicsTest); err == .None {
 		// Apply forces based on input
-		if is_key_held(input, .W) {
-			apply_impulse(
-				world,
-				physics_state.player_entity,
-				{0, -200},
-				get_position(world, physics_state.player_entity),
-			)
+		if is_key_pressed(input, .W) {
+			fmt.println("!Applying impulse")
+			pos := get_position(world, physics_state.player_entity)
+			apply_impulse(world, physics_state.player_entity, {0, -200}, {pos.x, pos.y - 100})
 		}
 		if is_key_held(input, .S) {
 			apply_impulse(
@@ -54,15 +51,15 @@ physics_movement_system :: proc(world: ^World, dt: f32) {
 			)
 		}
 
-		// Process collisions
-		contacts := get_contacts(world, physics_state.player_entity)
-		defer delete(contacts)
+		// // Process collisions
+		// contacts := get_contacts(world, physics_state.player_entity)
+		// defer delete(contacts)
 
-		for contact in contacts {
-			if contact.state == .Begin {
-				fmt.println("Collision detected!")
-			}
-		}
+		// for contact in contacts {
+		// 	if contact.state == .Begin {
+		// 		fmt.println("Collision detected!")
+		// 	}
+		// }
 	}
 }
 

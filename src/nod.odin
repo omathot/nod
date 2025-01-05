@@ -24,12 +24,8 @@ Nod :: struct {
 	// audio_system: AudioSystem,
 	// scene_manager: SceneManager,
 
-	// state n sync
-	command_queue:         CommandQueue,
-	physics_complete:      sync.Sema,
-	physics_thread:        ^thread.Thread,
-	physics_thread_ctx:    ^PhysicsThreadContext,
-	state_buffer:          StateBuffer,
+	// threading
+	job_system:            ^JobSystem,
 
 	//time
 	performance_frequency: f64,
@@ -49,6 +45,7 @@ Nod :: struct {
 nod_init :: proc(config: NodConfig) -> (^Nod, NodError) {
 	nod := new(Nod)
 	nod.config = config
+	nod.job_system = create_job_system()
 
 	if sdl.Init(sdl.INIT_VIDEO) < 0 {
 		return nil, .FailedToInitSdl
@@ -69,9 +66,7 @@ nod_init :: proc(config: NodConfig) -> (^Nod, NodError) {
 	}
 
 	nod.is_running = true
-	nod.ecs_manager.world = create_world()
-
-	init_threads(nod)
+	nod.ecs_manager.world = create_world(nod.job_system)
 
 	nod.window = window
 	nod.renderer = renderer
@@ -96,7 +91,8 @@ nod_clean :: proc(nod: ^Nod) {
 		}
 
 		// threads
-		cleanup_threads(nod)
+		destroy_job_system(nod.job_system)
+
 		sdl.Quit()
 		nod.is_running = false
 		free(nod)
@@ -109,14 +105,16 @@ nod_run :: proc(nod: ^Nod) {
 	mem.tracking_allocator_init(&track, context.allocator)
 	context.allocator = mem.tracking_allocator(&track)
 	defer alloc_clean(&track)
+
+	// time
 	nod.performance_frequency = f64(sdl.GetPerformanceFrequency())
 	nod.prev_counter = f64(sdl.GetPerformanceCounter())
 	nod.current_time = nod.prev_counter / nod.performance_frequency
 	accumulator := f64(0)
+
 	nod.is_running = true
-
-
 	for nod.is_running {
+		// time update
 		current_counter := f64(sdl.GetPerformanceCounter())
 		frame_time := f64(current_counter - nod.prev_counter) / nod.performance_frequency
 		nod.prev_counter = current_counter
@@ -146,109 +144,76 @@ nod_run :: proc(nod: ^Nod) {
 		update_input(input)
 		if input.quit_request {
 			nod.is_running = false
-			push_command(&nod.command_queue, Command{type = .Quit})
 			break
 		}
 
+		// fixed timestep update
 		accumulator += frame_time
-		loops := 0
-		for accumulator > FIXED_DT { 	// && loops < MAX_FRAMESKIP
-			process_fixed_update(input)
-			// update game world
-			fixed_update(nod)
+		for accumulator > FIXED_DT {
+			// fixed update job
+			fixed_update(nod.ecs_manager.world, input)
 
-			// signal physics thread
-			push_command(&nod.command_queue, Command{type = .UpdatePhysics})
-			sync.sema_wait(&nod.physics_complete)
-
-			// update state buffer
-			sync.mutex_lock(&nod.state_buffer.mutex)
-			next_write := (nod.state_buffer.write_index + 1) % 3
-			if next_write != nod.state_buffer.read_index {
-				nod.state_buffer.write_index = next_write
+			// physics job (can run parallel with fixed update)
+			if physics_world, err := get_resource(nod.ecs_manager.world.resources, PhysicsWorld);
+			   err == .None {
+				physics_update(nod.ecs_manager.world, physics_world, f32(FIXED_DT))
 			}
-			sync.mutex_unlock(&nod.state_buffer.mutex)
 
 			accumulator -= FIXED_DT
-			loops += 1
 		}
 		variable_update(nod)
 
 
-		interpolation := clamp(accumulator / FIXED_DT, 0, 1)
-		render(nod, f32(interpolation))
+		interpolation := f32(accumulator / FIXED_DT)
+		render(nod, interpolation)
 	}
 }
 
 render :: proc(nod: ^Nod, interpolation: f32) {
-	// sdl.SetRenderDrawColor(nod.renderer.handle, 0, 0, 0, 255)
-	// sdl.RenderClear(nod.renderer.handle)
-
-	// if nod.render_game != nil && nod.game != nil {
-	// 	nod.render_game(nod.game, nod, interpolation)
-	// }
-
-	// sdl.RenderPresent(nod.renderer.handle)
-	render_system(nod.ecs_manager.world, &nod.renderer)
+	render_system(nod.ecs_manager.world, &nod.renderer, interpolation)
 }
 
-// fixed_update :: proc(nod: ^Nod) {
-// 	// quit event check
-// 	if nod.input_state.quit_request ||
-// 	   (nod.should_quit != nil && nod.game != nil && nod.should_quit(nod.game)) {
-// 		fmt.println("received quit event")
-// 		nod.is_running = false
-// 		return
-// 	}
 
-// 	// ecs sytems
-// 	systems_update(nod.ecs_manager.world, f32(nod.delta_time))
+fixed_update :: proc(world: ^World, input: ^InputState) {
+	completion := sync.Sema{}
+	should_quit := false
 
-// 	// exposed fixed function
-// 	if nod.fixed_update_game != nil && nod.game != nil {
-// 		nod.fixed_update_game(nod.game, &nod.input_state)
-// 	}
-// }
-fixed_update :: proc(nod: ^Nod) {
-	input: ^InputState
-	if inp, err := get_resource(nod.ecs_manager.world.resources, InputState); err == .None {
-		input = inp
-	} else {
-		fmt.eprintln("Failed to get InputState Resource")
-		nod.is_running = false
+	fixed_update_data := FixedUpdateData {
+		world       = world,
+		input       = input,
+		dt          = FIXED_DT,
+		completion  = &completion,
+		should_quit = &should_quit,
 	}
 
-	// quit event check
-	if input.quit_request {
-		fmt.println("Received quit event")
-		nod.is_running = false
-		return
+	fixed_job := Job {
+		procedure  = fixed_update_job,
+		data       = &fixed_update_data,
+		completion = &completion,
 	}
 
-	// fmt.println("Running fixed update with dt:", nod.delta_time) // Debug print
-	systems_update(nod.ecs_manager.world, 1.0 / f32(TICKS_PER_SECOND))
+	schedule_job(world.job_system, fixed_job)
+	sync.sema_wait(&completion)
 
-	// user's game logic
-	// if nod.fixed_update_game != nil && nod.game != nil {
-	// 	nod.fixed_update_game(nod.game, input)
-	// }
 }
 
-// Separate from fixed_update, this runs every frame:
-// Things that can run at variable timestep:
-// - Particle effects
-// - UI animations
-// - Camera smoothing
-// - Visual effects
 variable_update :: proc(nod: ^Nod) {
-	// if nod.frame_update_game != nil && nod.game != nil {
-	// 	if input, err := get_resource(nod.ecs_manager.world.resources, InputState); err == .None {
-	// 		nod.frame_update_game(nod.game, input)
-	// 	} else {
-	// 		fmt.eprintln("Failed to get InputState Resource")
-	// 		nod.is_running = false
-	// 	}
-	// }
+	completion := sync.Sema{}
+
+	update_data := VariableUpdateData {
+		world      = nod.ecs_manager.world,
+		dt         = f32(nod.delta_time),
+		completion = &completion,
+	}
+
+	job := Job {
+		procedure  = variable_update_job,
+		data       = &update_data,
+		completion = &completion,
+	}
+
+	schedule_job(nod.job_system, job)
+	sync.sema_wait(&completion)
 }
 
 // to be called during game setup, during runtime everything goes through systems and Resources

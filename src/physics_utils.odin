@@ -1,8 +1,17 @@
 package nod
 
+import "core:math"
+import "core:sync"
 import b2 "vendor:box2d"
 
 ShapeID :: distinct u64
+
+PhysicsUpdateData :: struct {
+	world:      ^PhysicsWorld,
+	dt:         f32,
+	completion: ^sync.Sema,
+}
+
 
 PhysicsBody :: struct {
 	handle:          b2.BodyId,

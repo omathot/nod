@@ -42,7 +42,7 @@ resize_column :: proc(column: ^Column, new_capacity: int) -> mem.Allocator_Error
 	return .None
 }
 
-create_world :: proc() -> ^World {
+create_world :: proc(job_system: ^JobSystem) -> ^World {
 	world := new(World)
 
 	world.next_entity_id = 1
@@ -54,6 +54,7 @@ create_world :: proc() -> ^World {
 	world.free_entities = make([dynamic]EntityID)
 	world.entity_to_archetype = make(map[EntityID]u64)
 	world.system_map = make(map[SystemID]^System)
+	world.job_system = job_system
 
 	world.resources = create_resources()
 
