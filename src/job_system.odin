@@ -1,5 +1,6 @@
 package nod
 
+import "core:fmt"
 import "core:container/queue"
 import "core:sync"
 import "core:thread"
@@ -121,17 +122,37 @@ schedule_job :: proc(system: ^JobSystem, job: Job) {
 	sync.sema_post(&system.queue_semaphore)
 }
 
+// fixed_update_job :: proc(data: rawptr) {
+// 	update_data := cast(^FixedUpdateData)data
+
+// 	process_fixed_update(update_data.input)
+
+// 	if update_data.input.quit_request {
+// 		update_data.should_quit^ = true
+// 		return
+// 	}
+
+// 	systems_update(update_data.world, f32(update_data.dt))
+// }
 fixed_update_job :: proc(data: rawptr) {
+	fmt.println("Starting fixed update job")
 	update_data := cast(^FixedUpdateData)data
+	if update_data == nil {
+		fmt.println("ERROR: Nil update data")
+		return
+	}
 
 	process_fixed_update(update_data.input)
+	fmt.println("Processed fixed update")
 
 	if update_data.input.quit_request {
 		update_data.should_quit^ = true
 		return
 	}
 
+	fmt.println("Running systems...")
 	systems_update(update_data.world, f32(update_data.dt))
+	fmt.println("Fixed update job complete")
 }
 
 variable_update_job :: proc(data: rawptr) {

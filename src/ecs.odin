@@ -47,6 +47,8 @@ create_world :: proc(job_system: ^JobSystem) -> ^World {
 
 	world.next_entity_id = 1
 	world.entity_count = 0
+
+	world.component_registry = create_component_registry()
 	world.component_count = 0
 	world.archetypes = make(map[u64]Archetype)
 	world.columns = make(map[u64]map[ComponentID]Column)
@@ -57,6 +59,8 @@ create_world :: proc(job_system: ^JobSystem) -> ^World {
 	world.job_system = job_system
 
 	world.resources = create_resources()
+
+	init_tag_system()
 
 	input_state := new(InputState)
 	init_input_state(input_state)
@@ -83,6 +87,9 @@ destroy_world :: proc(world: ^World) {
 			cleanup_input_state(input_state)
 		}
 		destroy_resources(world.resources)
+
+		cleanup_tags()
+		destroy_component_registry(&world.component_registry)
 
 		// components
 		for archetype_id, columns in world.columns {
@@ -116,6 +123,8 @@ destroy_world :: proc(world: ^World) {
 // ----------------------------------------
 
 // __COMPONENTS
+
+// !! LEGACY CODE FROM BEFORE ComponentRegistry !! delete 
 
 register_component :: proc(world: ^World, $T: typeid) -> ComponentID {
 	type_info := type_info_of(T)

@@ -44,9 +44,9 @@ Material :: struct {
 
 
 register_core_components :: proc(world: ^World) {
-	transform_component_id = register_component(world, Transform)
-	camera_component_id = register_component(world, CameraComponent)
-	sprite_component_id = register_component(world, SpriteComponent)
-	text_component_id = register_component(world, TextComponent)
+	transform_component_id = get_or_register_component(world, Transform)
+	camera_component_id = get_or_register_component(world, CameraComponent)
+	sprite_component_id = get_or_register_component(world, SpriteComponent)
+	text_component_id = get_or_register_component(world, TextComponent)
 }
 

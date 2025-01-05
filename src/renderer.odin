@@ -1,6 +1,6 @@
 package nod
 
-// import "core:fmt"
+import "core:fmt"
 import "core:math"
 import "core:slice"
 import sdl "vendor:sdl2"
@@ -41,7 +41,7 @@ camera_system :: proc(world: ^World) {
 }
 
 sprite_render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
-	// 	fmt.println("Setting Sprite rendering")
+	fmt.println("Setting Sprite rendering")
 	required := bit_set[0 ..= MAX_COMPONENTS]{}
 	required += {int(sprite_component_id), int(transform_component_id)}
 
@@ -52,7 +52,7 @@ sprite_render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
 	sprites := make([dynamic]SpriteEntry)
 	defer delete(sprites)
 
-	// 	fmt.println("Querying for sprites")
+	fmt.println("Querying for sprites")
 	q := query(world, required)
 	defer delete(q.match_archetype)
 
@@ -69,7 +69,7 @@ sprite_render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
 			append(&sprites, SpriteEntry{entity = entity, z_index = sprite.z_index})
 		}
 	}
-	// 	fmt.printfln("found %d sprites to render\n", sprite_count)
+	fmt.printfln("found %d sprites to render\n", sprite_count)
 
 	// sort by z index
 	slice.sort_by(sprites[:], proc(a, b: SpriteEntry) -> bool {
@@ -139,6 +139,59 @@ sprite_render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
 		)
 	}
 }
+// sprite_render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
+// 	fmt.println("Starting sprite rendering")
+// 	required := bit_set[0 ..= MAX_COMPONENTS]{}
+// 	required += {int(sprite_component_id), int(transform_component_id)}
+
+// 	SpriteEntry :: struct {
+// 		entity:  EntityID,
+// 		z_index: f32,
+// 	}
+// 	sprites := make([dynamic]SpriteEntry)
+// 	defer delete(sprites)
+
+// 	fmt.println("Querying for sprites")
+// 	q := query(world, required)
+// 	defer delete(q.match_archetype)
+
+// 	it := iterate_query(&q)
+// 	for entity, ok := next_entity(&it); ok; entity, ok = next_entity(&it) {
+// 		fmt.printf("Processing entity %d\n", entity)
+
+// 		sprite, s_ok := get_component_typed(world, entity, sprite_component_id, SpriteComponent)
+// 		if !s_ok {
+// 			fmt.println("Failed to get sprite component")
+// 			continue
+// 		}
+
+// 		fmt.println("Got sprite component")
+// 		if sprite.texture == nil {
+// 			fmt.println("WARNING: Sprite has nil texture")
+// 			continue
+// 		}
+// 		if sprite.texture.handle == nil {
+// 			fmt.println("WARNING: Sprite texture handle is nil")
+// 			continue
+// 		}
+
+// 		transform, t_ok := get_component_typed(world, entity, transform_component_id, Transform)
+// 		if !t_ok {
+// 			fmt.println("Failed to get transform component")
+// 			continue
+// 		}
+
+// 		fmt.printf(
+// 			"Sprite z_index: %f, position: {%f, %f}\n",
+// 			sprite.z_index,
+// 			transform.position.x,
+// 			transform.position.y,
+// 		)
+// 		append(&sprites, SpriteEntry{entity = entity, z_index = sprite.z_index})
+// 	}
+
+// 	fmt.printf("Found %d sprites to render\n", len(sprites))
+// }
 
 // main system, coordinates all others
 render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
@@ -146,15 +199,15 @@ render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
 	sdl.SetRenderDrawColor(renderer.handle, 0, 0, 0, 255)
 	sdl.RenderClear(renderer.handle)
 
-	// 	fmt.println("Running camera system...")
+	// fmt.println("Running camera system...")
 	camera_system(world)
 
-	// 	fmt.println("Running sprite system...")
+	// fmt.println("Running sprite system...")
 	sprite_render_system(world, renderer, alpha)
 
-	// 	fmt.println("Present renderer...")
+	// fmt.println("Present renderer...")
 	sdl.RenderPresent(renderer.handle)
-	// 	fmt.println("Frame complete\n")
+	// fmt.println("Frame complete\n")
 }
 
 Renderer :: struct {

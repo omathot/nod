@@ -56,6 +56,7 @@ World :: struct {
 	// lookup
 	entity_to_archetype: map[EntityID]u64,
 	system_map:          map[SystemID]^System,
+	component_registry:  ComponentRegistry,
 
 	// systems
 	systems:             [dynamic]System,
@@ -93,5 +94,72 @@ System :: struct {
 SystemGroup :: struct {
 	systems: [dynamic]SystemID,
 	enabled: bool,
+}
+
+ComponentRegistry :: struct {
+	type_to_id:       map[typeid]ComponentID,
+	registered_types: [dynamic]ComponentType,
+	next_id:          ComponentID,
+}
+
+create_component_registry :: proc() -> ComponentRegistry {
+	return ComponentRegistry {
+		type_to_id = make(map[typeid]ComponentID),
+		registered_types = make([dynamic]ComponentType),
+		next_id = 0,
+	}
+}
+
+destroy_component_registry :: proc(registry: ^ComponentRegistry) {
+	delete(registry.type_to_id)
+	delete(registry.registered_types)
+}
+
+get_or_register_component :: proc(world: ^World, $T: typeid) -> ComponentID {
+	// already exists
+	if id, ok := world.component_registry.type_to_id[T]; ok {
+		return id
+	}
+
+	// do the work
+	ti := type_info_of(T)
+
+	id := world.component_registry.next_id
+	world.component_registry.next_id += 1
+
+	component_type := ComponentType {
+		id        = id,
+		size      = ti.size,
+		alignment = ti.align,
+	}
+
+	append(&world.component_registry.registered_types, component_type)
+	world.component_registry.type_to_id[T] = id
+
+	world.component_types[world.component_count] = component_type
+	world.component_count += 1
+	return id
+}
+
+
+is_component_registered :: proc(world: ^World, $T: typeid) -> (ComponentType, bool) {
+	_, ok := world.component_registry.type_to_id[T]
+	return ok
+}
+
+get_component_info :: proc(world: ^World, $T: typeid) -> (ComponentType, bool) {
+	if id, ok := world.component_registry.type_to_id[T]; ok {
+		for component in world.component_registry.registered_types {
+			if component.id == id {
+				return component, true
+			}
+		}
+	}
+	return ComponentType{}, false
+}
+
+get_component_id :: proc(world: ^World, $T: typeid) -> (ComponentID, bool) {
+	id, ok := world.component_registry.type_to_id[T]
+	return id, ok
 }
 
