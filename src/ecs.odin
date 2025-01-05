@@ -82,10 +82,6 @@ destroy_world :: proc(world: ^World) {
 			cleanup_input_state(input_state)
 		}
 		destroy_resources(world.resources)
-		// if world.input_state != nil {
-		// 	cleanup_input_state(world.input_state)
-		// 	free(world.input_state)
-		// }
 
 		// components
 		for archetype_id, columns in world.columns {

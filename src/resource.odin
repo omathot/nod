@@ -71,8 +71,12 @@ remove_resource :: proc(resources: ^Resources, $T: typeid) -> ResourceError {
 }
 
 destroy_resources :: proc(resources: ^Resources) {
-	for _, storage in resources.storage {
+	for type_id, storage in resources.storage {
 		if storage.initialized {
+			if type_id == typeid_of(PhysicsWorld) {
+				physics_world := cast(^PhysicsWorld)storage.data
+				physics_cleanup(physics_world)
+			}
 			free(storage.data)
 		}
 	}

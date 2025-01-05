@@ -182,6 +182,7 @@ add_rigid_body :: proc(
 			type = body_type,
 			entity_id = entity_id,
 			transform = Transform{position = position},
+			shapes = make([dynamic]ShapeID),
 		}
 
 		physics_world.bodies[entity_id] = body
@@ -203,7 +204,7 @@ add_box_collider :: proc(
 	is_sensor: bool,
 ) -> ShapeID {
 	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
-		if body, ok := physics_world.bodies[entity_id]; ok {
+		if body, ok := &physics_world.bodies[entity_id]; ok { // need to take the pointer of here otherwise leak 64 bytes
 
 			box := b2.MakeBox(half_width, half_height)
 			shape_def := b2.DefaultShapeDef()
@@ -232,7 +233,7 @@ add_circle_collider :: proc(
 	is_sensor: bool,
 ) -> ShapeID {
 	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
-		if body, ok := physics_world.bodies[entity_id]; ok {
+		if body, ok := &physics_world.bodies[entity_id]; ok {
 			shape_def := b2.DefaultShapeDef()
 			shape_def.density = density
 			shape_def.friction = friction
@@ -264,7 +265,7 @@ add_capsule_collider :: proc(
 	is_sensor: bool,
 ) -> ShapeID {
 	if physics_world, err := get_resource(world.resources, PhysicsWorld); err == .None {
-		if body, ok := physics_world.bodies[entity_id]; ok {
+		if body, ok := &physics_world.bodies[entity_id]; ok {
 			shape_def := b2.DefaultShapeDef()
 			shape_def.density = density
 			shape_def.friction = friction

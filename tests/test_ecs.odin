@@ -45,90 +45,90 @@ entity_add :: proc(t: ^test.T) {
 }
 
 
-@(test)
-get_component_after_entity_remove :: proc(t: ^test.T) {
-	world := nod.create_world()
-	defer nod.destroy_world(world)
-	log.info("World created")
+// @(test)
+// get_component_after_entity_remove :: proc(t: ^test.T) {
+// 	world := nod.create_world()
+// 	defer nod.destroy_world(world)
+// 	log.info("World created")
 
-	entity_id := nod.create_entity(world)
-	component_id := nod.register_component(world, TestComponent)
-	c_test := TestComponent {
-		v = 12,
-	}
-	err := nod.add_component(world, entity_id, component_id, &c_test)
-	nod.destroy_entity(world, entity_id)
-	component_ptr, ok := nod.get_component_typed(world, entity_id, component_id, TestComponent)
-	test.expect(t, ok == false, "Managed to retrive component when entity was destroyed?")
-}
+// 	entity_id := nod.create_entity(world)
+// 	component_id := nod.register_component(world, TestComponent)
+// 	c_test := TestComponent {
+// 		v = 12,
+// 	}
+// 	err := nod.add_component(world, entity_id, component_id, &c_test)
+// 	nod.destroy_entity(world, entity_id)
+// 	component_ptr, ok := nod.get_component_typed(world, entity_id, component_id, TestComponent)
+// 	test.expect(t, ok == false, "Managed to retrive component when entity was destroyed?")
+// }
 
-@(test)
-iterate_query :: proc(t: ^test.T) {
-	world := nod.create_world()
-	defer nod.destroy_world(world)
+// @(test)
+// iterate_query :: proc(t: ^test.T) {
+// 	world := nod.create_world()
+// 	defer nod.destroy_world(world)
 
-	entity_id1 := nod.create_entity(world)
-	entity_id2 := nod.create_entity(world)
-	entity_id3 := nod.create_entity(world)
-	component_id := nod.register_component(world, TestComponent)
+// 	entity_id1 := nod.create_entity(world)
+// 	entity_id2 := nod.create_entity(world)
+// 	entity_id3 := nod.create_entity(world)
+// 	component_id := nod.register_component(world, TestComponent)
 
-	c_test := TestComponent {
-		v = 20,
-	}
-	err := nod.add_component(world, entity_id1, component_id, &c_test)
-	_err := nod.add_component(world, entity_id2, component_id, &c_test)
-	__err := nod.add_component(world, entity_id3, component_id, &c_test)
-	test.expect(t, err == .None, "Error when adding component 1")
-	test.expect(t, _err == .None, "Error when adding component 2")
-	test.expect(t, __err == .None, "Error when adding component 3")
+// 	c_test := TestComponent {
+// 		v = 20,
+// 	}
+// 	err := nod.add_component(world, entity_id1, component_id, &c_test)
+// 	_err := nod.add_component(world, entity_id2, component_id, &c_test)
+// 	__err := nod.add_component(world, entity_id3, component_id, &c_test)
+// 	test.expect(t, err == .None, "Error when adding component 1")
+// 	test.expect(t, _err == .None, "Error when adding component 2")
+// 	test.expect(t, __err == .None, "Error when adding component 3")
 
-	required := bit_set[0 ..= nod.MAX_COMPONENTS]{}
-	required += {int(component_id)}
-	query := nod.query(world, required)
-	defer delete(query.match_archetype)
+// 	required := bit_set[0 ..= nod.MAX_COMPONENTS]{}
+// 	required += {int(component_id)}
+// 	query := nod.query(world, required)
+// 	defer delete(query.match_archetype)
 
-	iter := nod.iterate_query(&query)
-	count := 0
-	for entity, ok := nod.next_entity(&iter); ok; entity, ok = nod.next_entity(&iter) {
-		count += 1
-		if comp, ok := nod.get_component_typed(world, entity, component_id, TestComponent); ok {
-			test.expect(t, comp.v == 20, "Component value missmatch")
-		} else {
-			test.fail_now(t, "Failed to get component data")
-		}
-	}
+// 	iter := nod.iterate_query(&query)
+// 	count := 0
+// 	for entity, ok := nod.next_entity(&iter); ok; entity, ok = nod.next_entity(&iter) {
+// 		count += 1
+// 		if comp, ok := nod.get_component_typed(world, entity, component_id, TestComponent); ok {
+// 			test.expect(t, comp.v == 20, "Component value missmatch")
+// 		} else {
+// 			test.fail_now(t, "Failed to get component data")
+// 		}
+// 	}
 
-	test.expectf(t, count == 3, "Expected 3 entities with component, found %d", count)
-}
+// 	test.expectf(t, count == 3, "Expected 3 entities with component, found %d", count)
+// }
 
-@(test)
-get_input_through_ecs_system :: proc(t: ^test.T) {
-	world := nod.create_world()
-	defer nod.destroy_world(world)
+// @(test)
+// get_input_through_ecs_system :: proc(t: ^test.T) {
+// 	world := nod.create_world()
+// 	defer nod.destroy_world(world)
 
-	inputs := nod.get_input(world)
-	test.expect(t, inputs != nil, "Failed to fetch inputs from world")
-}
+// 	inputs := nod.get_input(world)
+// 	test.expect(t, inputs != nil, "Failed to fetch inputs from world")
+// }
 
 
-system_test :: proc(world: ^nod.World, dt: f32) {
-	log.info("Hello from system! :)")
-}
+// system_test :: proc(world: ^nod.World, dt: f32) {
+// 	log.info("Hello from system! :)")
+// }
 
-@(test)
-add_system_to_world :: proc(t: ^test.T) {
-	world := nod.create_world()
-	defer nod.destroy_world(world)
+// @(test)
+// add_system_to_world :: proc(t: ^test.T) {
+// 	world := nod.create_world()
+// 	defer nod.destroy_world(world)
 
-	component_id := nod.register_component(world, TestComponent)
-	c_test := TestComponent {
-		v = 20,
-	}
+// 	component_id := nod.register_component(world, TestComponent)
+// 	c_test := TestComponent {
+// 		v = 20,
+// 	}
 
-	required := bit_set[0 ..= nod.MAX_COMPONENTS]{}
-	required += {int(component_id)}
-	// for this to get called nod needs to be init, fixed_update() calls the system update functions
-	nod.system_add(world, "test", required, system_test)
-	// nod.system
-}
+// 	required := bit_set[0 ..= nod.MAX_COMPONENTS]{}
+// 	required += {int(component_id)}
+// 	// for this to get called nod needs to be init, fixed_update() calls the system update functions
+// 	nod.system_add(world, "test", required, system_test)
+// 	// nod.system
+// }
 

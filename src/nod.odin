@@ -24,14 +24,12 @@ Nod :: struct {
 	// audio_system: AudioSystem,
 	// scene_manager: SceneManager,
 
-	// threading
-	physics_thread:        ^thread.Thread,
-	physics_thread_ctx:    ^PhysicsThreadContext,
-
 	// state n sync
-	state_buffer:          StateBuffer,
 	command_queue:         CommandQueue,
 	physics_complete:      sync.Sema,
+	physics_thread:        ^thread.Thread,
+	physics_thread_ctx:    ^PhysicsThreadContext,
+	state_buffer:          StateBuffer,
 
 	//time
 	performance_frequency: f64,
@@ -42,9 +40,9 @@ Nod :: struct {
 
 	// user's game
 	game:                  rawptr,
-	fixed_update_game:     proc(_: rawptr, input_state: ^InputState),
-	frame_update_game:     proc(_: rawptr, input_state: ^InputState),
-	render_game:           proc(_: rawptr, nod: ^Nod, dt: f32),
+	// fixed_update_game:     proc(_: rawptr, input_state: ^InputState),
+	// frame_update_game:     proc(_: rawptr, input_state: ^InputState),
+	// render_game:           proc(_: rawptr, nod: ^Nod, dt: f32),
 }
 
 
@@ -77,6 +75,7 @@ nod_init :: proc(config: NodConfig) -> (^Nod, NodError) {
 
 	nod.window = window
 	nod.renderer = renderer
+	init_render_system(nod.ecs_manager.world)
 	return nod, .None
 }
 
@@ -86,10 +85,6 @@ nod_clean :: proc(nod: ^Nod) {
 			// not allocated rn its just tests, probably add for real games
 			// free(nod.game)
 		}
-		// Clean up input system
-		// if nod.ecs_manager.world != nil && nod.ecs_manager.world.input_state != nil {
-		// queue.destroy(&nod.ecs_manager.world.input_state.event_buffer)
-		// }
 		if nod.ecs_manager.world != nil {
 			destroy_world(nod.ecs_manager.world)
 		}
@@ -139,6 +134,7 @@ nod_run :: proc(nod: ^Nod) {
 			time_res.total_time += time_res.delta_time
 		}
 
+		// update InputState Resource
 		input: ^InputState
 		if inp, err := get_resource(nod.ecs_manager.world.resources, InputState); err == .None {
 			input = inp
@@ -147,7 +143,6 @@ nod_run :: proc(nod: ^Nod) {
 			nod.is_running = false
 			break
 		}
-
 		update_input(input)
 		if input.quit_request {
 			nod.is_running = false
@@ -186,14 +181,15 @@ nod_run :: proc(nod: ^Nod) {
 }
 
 render :: proc(nod: ^Nod, interpolation: f32) {
-	sdl.SetRenderDrawColor(nod.renderer.handle, 0, 0, 0, 255)
-	sdl.RenderClear(nod.renderer.handle)
+	// sdl.SetRenderDrawColor(nod.renderer.handle, 0, 0, 0, 255)
+	// sdl.RenderClear(nod.renderer.handle)
 
-	if nod.render_game != nil && nod.game != nil {
-		nod.render_game(nod.game, nod, interpolation)
-	}
+	// if nod.render_game != nil && nod.game != nil {
+	// 	nod.render_game(nod.game, nod, interpolation)
+	// }
 
-	sdl.RenderPresent(nod.renderer.handle)
+	// sdl.RenderPresent(nod.renderer.handle)
+	render_system(nod.ecs_manager.world, &nod.renderer)
 }
 
 // fixed_update :: proc(nod: ^Nod) {
@@ -233,9 +229,9 @@ fixed_update :: proc(nod: ^Nod) {
 	systems_update(nod.ecs_manager.world, 1.0 / f32(TICKS_PER_SECOND))
 
 	// user's game logic
-	if nod.fixed_update_game != nil && nod.game != nil {
-		nod.fixed_update_game(nod.game, input)
-	}
+	// if nod.fixed_update_game != nil && nod.game != nil {
+	// 	nod.fixed_update_game(nod.game, input)
+	// }
 }
 
 // Separate from fixed_update, this runs every frame:
@@ -245,14 +241,19 @@ fixed_update :: proc(nod: ^Nod) {
 // - Camera smoothing
 // - Visual effects
 variable_update :: proc(nod: ^Nod) {
-	if nod.frame_update_game != nil && nod.game != nil {
-		if input, err := get_resource(nod.ecs_manager.world.resources, InputState); err == .None {
-			nod.frame_update_game(nod.game, input)
-		} else {
-			fmt.eprintln("Failed to get InputState Resource")
-			nod.is_running = false
-		}
-	}
+	// if nod.frame_update_game != nil && nod.game != nil {
+	// 	if input, err := get_resource(nod.ecs_manager.world.resources, InputState); err == .None {
+	// 		nod.frame_update_game(nod.game, input)
+	// 	} else {
+	// 		fmt.eprintln("Failed to get InputState Resource")
+	// 		nod.is_running = false
+	// 	}
+	// }
+}
+
+// to be called during game setup, during runtime everything goes through systems and Resources
+get_world :: proc(nod: ^Nod) -> ^World {
+	return nod.ecs_manager.world
 }
 
 // to use for precise timing

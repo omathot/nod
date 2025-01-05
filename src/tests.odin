@@ -4,175 +4,216 @@ import "core:fmt"
 import "core:mem"
 import sdl "vendor:sdl2"
 
-ECSTest :: struct {
-	using game:  Game,
-	entity:      EntityID,
-	position_id: ComponentID,
-	velocity_id: ComponentID,
-}
-TestPosition :: struct {
-	x, y: f32,
+PhysicsTest :: struct {
+	running:       bool,
+	player_entity: EntityID,
+	wall_entities: [4]EntityID, // top, right, bottom, left walls
+	test_texture:  ^Texture,
 }
 
-TestVelocity :: struct {
-	x, y: f32,
-}
-
-test_position_id: ComponentID
-test_velocity_id: ComponentID
-
-movement_system :: proc(world: ^World, dt: f32) {
+physics_movement_system :: proc(world: ^World, dt: f32) {
 	input := get_input(world)
-	if is_key_pressed(input, .SPACE) {
-		fmt.println("caught SPACE")
-	}
-	if is_key_pressed(input, .A) {
-		fmt.println("caught A")
-	}
-	if is_key_held(input, .A) {
-		fmt.println("holding A")
-	}
 	if is_key_pressed(input, .ESCAPE) {
 		input.quit_request = true
+		return
 	}
-	required := bit_set[0 ..= MAX_COMPONENTS]{}
-	required += {int(test_position_id), int(test_velocity_id)}
 
-	// fmt.println("\nMovement system running")
-	// // fmt.println("Required components:", required)
+	// Get player entity from Resource since we can't pass it directly to the system
+	if physics_state, err := get_resource(world.resources, PhysicsTest); err == .None {
+		// Apply forces based on input
+		if is_key_held(input, .W) {
+			apply_impulse(
+				world,
+				physics_state.player_entity,
+				{0, -200},
+				get_position(world, physics_state.player_entity),
+			)
+		}
+		if is_key_held(input, .S) {
+			apply_impulse(
+				world,
+				physics_state.player_entity,
+				{0, 200},
+				get_position(world, physics_state.player_entity),
+			)
+		}
+		if is_key_held(input, .A) {
+			apply_impulse(
+				world,
+				physics_state.player_entity,
+				{-200, 0},
+				get_position(world, physics_state.player_entity),
+			)
+		}
+		if is_key_held(input, .D) {
+			apply_impulse(
+				world,
+				physics_state.player_entity,
+				{200, 0},
+				get_position(world, physics_state.player_entity),
+			)
+		}
 
-	q := query(world, required)
-	defer delete(q.match_archetype)
+		// Process collisions
+		contacts := get_contacts(world, physics_state.player_entity)
+		defer delete(contacts)
 
-	// fmt.println("Query found", len(q.match_archetype), "matching archetypes")
-
-	it := iterate_query(&q)
-	found_entities := 0
-	for entity, ok := next_entity(&it); ok; entity, ok = next_entity(&it) {
-		found_entities += 1
-		pos, pos_ok := get_component_typed(world, entity, test_position_id, TestPosition)
-		vel, vel_ok := get_component_typed(world, entity, test_velocity_id, TestVelocity)
-
-		if pos_ok && vel_ok {
-			pos.x += vel.x * dt
-			pos.y += vel.y * dt
+		for contact in contacts {
+			if contact.state == .Begin {
+				fmt.println("Collision detected!")
+			}
 		}
 	}
-	// fmt.println("Movement system processed", found_entities, "entities")
 }
 
-init_ecs_test :: proc(game: ^ECSTest, nod: ^Nod) {
-	fmt.println("Initializing ECS test")
+create_wall :: proc(
+	game: ^PhysicsTest,
+	world: ^World,
+	pos: Vec2,
+	size: Vec2,
+	is_horizontal: bool,
+) -> EntityID {
+	wall := create_entity(world)
 
-	// Register components
-	test_position_id = register_component(nod.ecs_manager.world, TestPosition)
-	test_velocity_id = register_component(nod.ecs_manager.world, TestVelocity)
-	fmt.println("Registered components:", test_position_id, test_velocity_id)
-
-	// Add movement system - store the ID
-	required := bit_set[0 ..= MAX_COMPONENTS]{}
-	required += {int(test_position_id), int(test_velocity_id)}
-	fmt.println("System required components:", required)
-	movement_sys_id := system_add(nod.ecs_manager.world, "Movement", required, movement_system)
-	fmt.println("Added movement system with ID:", movement_sys_id)
-
-	// Create test entity
-	game.entity = create_entity(nod.ecs_manager.world)
-	fmt.println("Created entity:", game.entity)
-
-	// Add components with verification
-	pos := TestPosition {
-		x = 400,
-		y = 300,
+	// Add static physics body
+	body := add_rigid_body(world, wall, .Static, pos)
+	if body != nil {
+		add_box_collider(world, wall, f32(size.x / 2), f32(size.y / 2), 1.0, 0.3, false)
 	}
-	err := add_component(nod.ecs_manager.world, game.entity, test_position_id, &pos)
-	if err != .None {
-		fmt.println("Error adding position component:", err)
+
+	// Add transform for rendering
+	transform := Transform {
+		position = pos,
+		rotation = 0,
+		scale    = {1, 1},
+	}
+	add_component(world, wall, transform_component_id, &transform)
+
+	// Add sprite
+	sprite := SpriteComponent {
+		texture = game^.test_texture,
+		rect    = Rect{0, 0, int(size.x), int(size.y)},
+		color   = {128, 128, 128, 255}, // Gray color for walls
+		z_index = 0,
+	}
+	add_component(world, wall, sprite_component_id, &sprite)
+
+	return wall
+}
+
+init_physics_test :: proc(game: ^PhysicsTest, nod: ^Nod) {
+	// Create camera
+	camera_entity := create_entity(nod.ecs_manager.world)
+	camera := CameraComponent {
+		projection_type = .Orthographic,
+		viewport        = Rect{0, 0, 800, 600},
+		zoom            = 1.0,
+		is_active       = true,
+	}
+	add_component(nod.ecs_manager.world, camera_entity, camera_component_id, &camera)
+
+	camera_transform := Transform {
+		position = {400, 300},
+		rotation = 0,
+		scale    = {1, 1},
+	}
+	add_component(nod.ecs_manager.world, camera_entity, transform_component_id, &camera_transform)
+
+	// Create test texture
+	surface := sdl.CreateRGBSurface(0, 50, 50, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF)
+	if surface == nil {
+		return
+	}
+	defer sdl.FreeSurface(surface)
+
+	sdl.FillRect(surface, nil, sdl.MapRGBA(surface.format, 255, 0, 0, 255))
+
+	game^.test_texture = new(Texture)
+	game^.test_texture.handle = sdl.CreateTextureFromSurface(nod.renderer.handle, surface)
+	if game^.test_texture.handle == nil {
+		free(game^.test_texture)
 		return
 	}
 
-	// Verify position was added
-	if pos_ptr, ok := get_component_typed(
+	// Set gravity
+	set_gravity(nod.ecs_manager.world, {0, 500}) // Positive Y is down
+
+	// Create player entity
+	game^.player_entity = create_entity(nod.ecs_manager.world)
+
+	// Add dynamic physics body to player
+	player_body := add_rigid_body(nod.ecs_manager.world, game^.player_entity, .Dynamic, {400, 300})
+	if player_body != nil {
+		add_box_collider(nod.ecs_manager.world, game^.player_entity, 25, 25, 1.0, 0.3, false)
+		set_linear_damping(nod.ecs_manager.world, game^.player_entity, 0.5) // Add some drag
+	}
+
+	player_transform := Transform {
+		position = {400, 300},
+		rotation = 0,
+		scale    = {1, 1},
+	}
+	add_component(
 		nod.ecs_manager.world,
-		game.entity,
-		test_position_id,
-		TestPosition,
-	); ok {
-		fmt.printf("Position component added successfully: (%f, %f)\n", pos_ptr.x, pos_ptr.y)
-	}
-
-	vel := TestVelocity {
-		x = 100,
-		y = 50,
-	}
-	err = add_component(nod.ecs_manager.world, game.entity, test_velocity_id, &vel)
-	if err != .None {
-		fmt.println("Error adding velocity component:", err)
-		return
-	}
-
-	// Verify velocity was added
-	if vel_ptr, ok := get_component_typed(
-		nod.ecs_manager.world,
-		game.entity,
-		test_velocity_id,
-		TestVelocity,
-	); ok {
-		fmt.printf("Velocity component added successfully: (%f, %f)\n", vel_ptr.x, vel_ptr.y)
-	}
-
-	// Verify entity has correct archetype
-	if archetype_id, ok := nod.ecs_manager.world.entity_to_archetype[game.entity]; ok {
-		archetype := nod.ecs_manager.world.archetypes[archetype_id]
-		fmt.println("Entity archetype mask:", archetype.component_mask)
-	}
-
-	game.running = true
-}
-
-
-ecs_test_update :: proc(game_ptr: rawptr, input_state: ^InputState) {
-	game := cast(^ECSTest)game_ptr
-	if is_key_pressed(input_state, .ESCAPE) {
-		game.running = false
-	}
-}
-
-ecs_test_display :: proc(game_ptr: rawptr, nod: ^Nod, interpolation: f32) {
-	game := cast(^ECSTest)game_ptr
-
-	// Get both position and velocity components
-	pos_ptr, pos_ok := get_component_typed(
-		nod.ecs_manager.world,
-		game.entity,
-		test_position_id, // Using the global test_position_id
-		TestPosition,
+		game^.player_entity,
+		transform_component_id,
+		&player_transform,
 	)
 
-	vel_ptr, vel_ok := get_component_typed(
+	player_sprite := SpriteComponent {
+		texture = game^.test_texture,
+		rect    = Rect{0, 0, 50, 50},
+		color   = {255, 0, 0, 255},
+		z_index = 1,
+	}
+	add_component(nod.ecs_manager.world, game^.player_entity, sprite_component_id, &player_sprite)
+
+	// Create walls
+	wall_thickness := f64(20)
+
+	// Top wall
+	game^.wall_entities[0] = create_wall(
+		game,
 		nod.ecs_manager.world,
-		game.entity,
-		test_velocity_id, // Using the global test_velocity_id
-		TestVelocity,
+		{400, wall_thickness / 2},
+		{800, wall_thickness},
+		true,
 	)
 
-	if pos_ok && vel_ok {
-		// Calculate interpolated position
-		interpolated_x := pos_ptr.x + (vel_ptr.x * (1.0 / f32(TICKS_PER_SECOND))) * interpolation
-		interpolated_y := pos_ptr.y + (vel_ptr.y * (1.0 / f32(TICKS_PER_SECOND))) * interpolation
+	// Right wall
+	game^.wall_entities[1] = create_wall(
+		game,
+		nod.ecs_manager.world,
+		{800 - wall_thickness / 2, 300},
+		{wall_thickness, 600},
+		false,
+	)
 
-		sdl.SetRenderDrawColor(nod.renderer.handle, 255, 0, 0, 255)
-		rect := sdl.Rect{i32(interpolated_x - 25), i32(interpolated_y - 25), 50, 50}
-		sdl.RenderFillRect(nod.renderer.handle, &rect)
-	}
-}
+	// Bottom wall
+	game^.wall_entities[2] = create_wall(
+		game,
+		nod.ecs_manager.world,
+		{400, 600 - wall_thickness / 2},
+		{800, wall_thickness},
+		true,
+	)
 
+	// Left wall
+	game^.wall_entities[3] = create_wall(
+		game,
+		nod.ecs_manager.world,
+		{wall_thickness / 2, 300},
+		{wall_thickness, 600},
+		false,
+	)
 
-alloc_clean :: proc(track: ^mem.Tracking_Allocator) {
-	for _, leak in track.allocation_map {
-		fmt.printfln("%v leaked %v bytes", leak.location, leak.size)
-	}
-	mem.tracking_allocator_destroy(track)
+	// Add movement system
+	system_add(nod.ecs_manager.world, "Physics Movement", {}, physics_movement_system)
+
+	// Add the PhysicsTest struct as a resource so the system can access it
+	insert_resource(nod.ecs_manager.world.resources, PhysicsTest, game^)
+
+	game^.running = true
 }
 
 ecs_test :: proc() {
@@ -181,10 +222,9 @@ ecs_test :: proc() {
 	context.allocator = mem.tracking_allocator(&track)
 	defer alloc_clean(&track)
 
-	fmt.println("Starting ECS test")
 	nod, err := nod_init(
 		NodConfig {
-			window_title = "ECS Test",
+			window_title = "Physics Test",
 			window_width = 800,
 			window_height = 600,
 			target_fps = 60,
@@ -193,20 +233,25 @@ ecs_test :: proc() {
 	)
 
 	if err != .None {
-		fmt.println("Failed to init:", err)
 		return
 	}
 	defer nod_clean(nod)
 
-	test: ECSTest
-	init_ecs_test(&test, nod)
-
+	test: PhysicsTest
+	init_physics_test(&test, nod)
 	nod.game = &test
-	nod.fixed_update_game = ecs_test_update
-	nod.frame_update_game = ecs_test_update
-	nod.render_game = ecs_test_display
 
-	fmt.println("Setup complete, starting game loop")
 	nod_run(nod)
+
+	if test.test_texture != nil {
+		destroy_texture(test.test_texture)
+	}
+}
+
+alloc_clean :: proc(track: ^mem.Tracking_Allocator) {
+	for _, leak in track.allocation_map {
+		fmt.printfln("%v leaked %v bytes", leak.location, leak.size)
+	}
+	mem.tracking_allocator_destroy(track)
 }
 

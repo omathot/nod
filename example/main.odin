@@ -11,7 +11,7 @@ sprite_id: nod.ComponentID
 rigidbody_id: nod.ComponentID
 
 CapsuleGame :: struct {
-	game:         nod.Game,
+	// game:         nod.Game,
 	entity_id:    nod.EntityID,
 	sprite_id:    nod.ComponentID,
 	transform_id: nod.ComponentID,
@@ -30,9 +30,19 @@ update_capsule_system :: proc(world: ^nod.World, dt: f32) {
 	// Get TimeResource
 	time_res, time_err := nod.get_resource(world.resources, nod.TimeResource)
 	if time_err != .None {
+		fmt.eprintln("Failed to fetch time resource")
 		return
 	}
 	fmt.printf("Total time: %.2f, Delta: %.2f\n", time_res.total_time, time_res.delta_time)
+
+	input, input_err := nod.get_resource(world.resources, nod.InputState)
+	if input_err != .None {
+		fmt.eprintln("Failed to fetch Input resource")
+		return
+	}
+	if nod.is_key_pressed(input, .ESCAPE) {
+		input.quit_request = true
+	}
 
 	// Query for entities with both Transform and Sprite components
 	required := bit_set[0 ..= nod.MAX_COMPONENTS]{}
@@ -81,8 +91,23 @@ init_capsule_game :: proc(game: ^CapsuleGame, nod_inst: ^nod.Nod) {
 	}
 
 	// Add physics body and capsule collider
-	physics_body := nod.add_rigid_body(nod_inst, game.entity_id, .Dynamic, {400, 400})
-	nod.add_capsule_collider(nod_inst, game.entity_id, 0, 32, 16, 1.0, 0.3, false)
+	physics_body := nod.add_rigid_body(
+		nod_inst.ecs_manager.world,
+		game.entity_id,
+		.Dynamic,
+		{400, 400},
+	)
+	nod.add_capsule_collider(
+		nod_inst.ecs_manager.world,
+		game.entity_id,
+		0,
+		32,
+		16,
+		1.0,
+		0.3,
+		false,
+	)
+	nod.set_gravity(nod_inst.ecs_manager.world, {0.0, -10.0})
 
 	// Add update system
 	required := bit_set[0 ..= nod.MAX_COMPONENTS]{}
@@ -163,10 +188,10 @@ main :: proc() {
 	init_capsule_game(&game, nod_inst)
 
 	nod_inst.game = &game
-	nod_inst.fixed_update_game = game_update
-	nod_inst.frame_update_game = game_update
-	nod_inst.render_game = display_game
-	nod_inst.should_quit = game_should_quit
+	// nod_inst.fixed_update_game = game_update
+	// nod_inst.frame_update_game = game_update
+	// nod_inst.render_game = display_game
+	// nod_inst.should_quit = game_should_quit
 
 	fmt.println("Starting game loop")
 	nod.nod_run(nod_inst)

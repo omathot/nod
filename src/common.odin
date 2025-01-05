@@ -1,5 +1,6 @@
 package nod
 
+FontID :: distinct u32
 
 Rect :: struct {
 	x, y: int,

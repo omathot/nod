@@ -1,5 +1,8 @@
 package nod
 
+import "core:sync"
+import "core:thread"
+
 EntityID :: distinct u64
 SystemID :: distinct u32
 ComponentID :: distinct u32
@@ -34,7 +37,7 @@ ComponentType :: struct {
 	alignment: int,
 }
 
-
+// Only accessible to the user through their nod_instance until they call nod_run(), then must query from World
 World :: struct {
 	// entities
 	entities:            [MAX_ENTITIES]EntityID,
