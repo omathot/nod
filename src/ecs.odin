@@ -4,6 +4,7 @@ import "core:container/queue"
 import "core:fmt"
 import "core:hash"
 import "core:mem"
+import sdl "vendor:sdl2"
 
 /*
 	goals:
@@ -86,7 +87,24 @@ destroy_world :: proc(world: ^World) {
 		if input_state, err := get_resource(world.resources, InputState); err == .None {
 			cleanup_input_state(input_state)
 		}
+
 		destroy_resources(world.resources)
+
+		q := query(world, {})
+		defer delete(q.match_archetype)
+
+		it := iterate_query(&q)
+		for entity, ok := next_entity(&it); ok; entity, ok = next_entity(&it) {
+			fmt.println("in for")
+			if sprite, s_ok := get_component_typed(
+				world,
+				entity,
+				sprite_component_id,
+				SpriteComponent,
+			); s_ok {
+				destroy_texture(sprite.texture)
+			}
+		}
 
 		cleanup_tags()
 		destroy_component_registry(&world.component_registry)

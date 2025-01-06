@@ -123,6 +123,7 @@ init_capsule_game :: proc(game: ^CapsuleGame, nod_inst: ^nod.Nod) {
 		fmt.eprintln("Error: Failed to load texture for player")
 		return
 	}
+	// defer free(texture)
 
 	w, h := nod.texture_get_dimensions(texture)
 	fmt.println("Texture dimensions:", w, h)
@@ -174,9 +175,10 @@ main :: proc() {
 	mem.tracking_allocator_init(&track, context.allocator)
 	context.allocator = mem.tracking_allocator(&track)
 	defer {
-		track: mem.Tracking_Allocator
-		mem.tracking_allocator_init(&track, context.allocator)
-		context.allocator = mem.tracking_allocator(&track)
+		for _, leak in track.allocation_map {
+			fmt.eprintfln("%v leaked %v bytes", leak.location, leak.size)
+		}
+		mem.tracking_allocator_destroy(&track)
 	}
 
 	nod_inst, err := nod.nod_init(

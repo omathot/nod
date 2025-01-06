@@ -29,10 +29,10 @@ TextureError :: enum {
 create_texture :: proc(renderer: ^Renderer, path: string) -> (^Texture, TextureError) {
 	texture := new(Texture)
 	texture.path = path
-	// cpath := strings.clone_to_cstring(path)
-	// defer delete(cpath)
+	cpath := strings.clone_to_cstring(path)
+	defer delete(cpath)
 
-	texture.handle = sdlimg.LoadTexture(renderer.handle, strings.clone_to_cstring(path))
+	texture.handle = sdlimg.LoadTexture(renderer.handle, cpath)
 	if texture.handle == nil {
 		free(texture)
 		return nil, .LoadFailed
