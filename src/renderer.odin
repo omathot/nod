@@ -41,7 +41,7 @@ camera_system :: proc(world: ^World) {
 }
 
 sprite_render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
-	fmt.println("Setting Sprite rendering")
+	// fmt.println("Setting Sprite rendering")
 	required := bit_set[0 ..= MAX_COMPONENTS]{}
 	required += {int(sprite_component_id), int(transform_component_id)}
 
@@ -52,7 +52,7 @@ sprite_render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
 	sprites := make([dynamic]SpriteEntry)
 	defer delete(sprites)
 
-	fmt.println("Querying for sprites")
+	// fmt.println("Querying for sprites")
 	q := query(world, required)
 	defer delete(q.match_archetype)
 
@@ -69,7 +69,7 @@ sprite_render_system :: proc(world: ^World, renderer: ^Renderer, alpha: f32) {
 			append(&sprites, SpriteEntry{entity = entity, z_index = sprite.z_index})
 		}
 	}
-	fmt.printfln("found %d sprites to render\n", sprite_count)
+	// fmt.printfln("found %d sprites to render\n", sprite_count)
 
 	// sort by z index
 	slice.sort_by(sprites[:], proc(a, b: SpriteEntry) -> bool {

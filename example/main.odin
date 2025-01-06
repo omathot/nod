@@ -6,6 +6,8 @@ import "core:math"
 import "core:mem"
 import sdl "vendor:sdl2"
 
+METERS_PER_PIXEL :: 100.0
+
 // Tags for our game entities
 Player :: struct {}
 Enemy :: struct {}
@@ -32,6 +34,11 @@ player_movement_system :: proc(world: ^nod.World, dt: f32) {
 	input := nod.get_input(world)
 	if input == nil do return
 
+	if nod.is_key_pressed(input, .ESCAPE) {
+		input.quit_request = true
+		return
+	}
+
 	q := nod.query(world, {})
 	defer delete(q.match_archetype)
 
@@ -47,8 +54,14 @@ player_movement_system :: proc(world: ^nod.World, dt: f32) {
 		if nod.is_key_held(input, .D) do move_dir.x += 1
 
 		if move_dir.x != 0 || move_dir.y != 0 {
+			fmt.printfln("Moving with impulse x: %v, y: %v", move_dir.x, move_dir.y)
 			pos := nod.get_position(world, entity)
-			nod.apply_impulse(world, entity, {move_dir.x * 200, move_dir.y * 200}, pos)
+			nod.apply_force(
+				world,
+				entity,
+				{move_dir.x * 200 * METERS_PER_PIXEL, move_dir.y * 200 * METERS_PER_PIXEL},
+				pos,
+			)
 		}
 
 		// Shoot bullets
@@ -101,48 +114,53 @@ init_capsule_game :: proc(game: ^CapsuleGame, nod_inst: ^nod.Nod) {
 	world := nod_inst.ecs_manager.world
 	game.running = true
 
-	// Register components
 	transform_id := nod.get_or_register_component(world, nod.Transform)
 	sprite_id := nod.get_or_register_component(world, nod.SpriteComponent)
 	physics_id := nod.get_or_register_component(world, nod.RigidBody)
 
-	// Register tags first!
-	nod.register_tag(world, Player, []nod.ComponentID{transform_id, sprite_id, physics_id})
-	nod.register_tag(world, Enemy, []nod.ComponentID{transform_id, sprite_id, physics_id})
-	nod.register_tag(world, Bullet, []nod.ComponentID{transform_id, sprite_id, physics_id})
-
-	// Create player entity
-	game.player = nod.spawn_tagged(world, Player)
-
-	// Create and setup texture
-	surface := sdl.CreateRGBSurface(0, 50, 50, 32, 0xFF000000, 0x00FF0000, 0x0000FF00, 0x000000FF)
-	if surface == nil do return
-	defer sdl.FreeSurface(surface)
-
-	sdl.FillRect(surface, nil, sdl.MapRGBA(surface.format, 0, 255, 0, 255))
-
-	test_texture := new(nod.Texture)
-	test_texture.handle = sdl.CreateTextureFromSurface(nod_inst.renderer.handle, surface)
-	if test_texture.handle == nil {
-		free(test_texture)
+	texture, err := nod.create_texture(&nod_inst.renderer, "./assets/Hero_01.png")
+	if err != .None {
+		fmt.eprintln("Error: Failed to load texture for player")
 		return
 	}
 
-	// Set component values directly
+	w, h := nod.texture_get_dimensions(texture)
+	fmt.println("Texture dimensions:", w, h)
+
+	// Register tags
+	nod.register_tag(world, Player, []nod.ComponentID{transform_id, sprite_id, physics_id})
+
+	// Spawn player
+	game.player = nod.spawn_tagged(world, Player)
+
+	// Set sprite component
 	if sprite, ok := nod.get_component_typed(world, game.player, sprite_id, nod.SpriteComponent);
 	   ok {
-		sprite.texture = test_texture
-		sprite.rect = nod.Rect{0, 0, 50, 50}
-		sprite.color = {0, 255, 0, 255}
+		fmt.println("Setting sprite component")
+		sprite.texture = texture
+		sprite.rect = nod.Rect{0, 0, 96, 96}
+		sprite.color = {255, 255, 255, 255} // Full white for no tinting
+		sprite.z_index = 0
+
+		// Verify sprite was set
+		fmt.println("Sprite texture:", sprite.texture != nil)
+		fmt.println("Sprite rect:", sprite.rect)
+	} else {
+		fmt.println("Failed to get sprite component")
 	}
 
+	// Set transform
 	if transform, ok := nod.get_component_typed(world, game.player, transform_id, nod.Transform);
 	   ok {
-		transform.position = {400, 500}
+		transform.position = {400, 300}
+		transform.scale = {1, 1}
+		transform.rotation = 0
+
+		fmt.println("Transform position:", transform.position)
 	}
 
 	// Add physics components
-	nod.add_capsule_collider(world, game.player, 0, 32, 16, 1.0, 0.3, false)
+	nod.add_capsule_collider(world, game.player, 0, 32, 16, 0.1, 0.3, false)
 	nod.set_gravity(world, {0, 0})
 
 	// Register systems

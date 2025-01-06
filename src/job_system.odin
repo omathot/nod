@@ -1,25 +1,19 @@
 package nod
 
-import "core:fmt"
 import "core:container/queue"
+import "core:fmt"
 import "core:sync"
 import "core:thread"
 
-// Helper structs and procedures
-FixedUpdateData :: struct {
-	world:       ^World,
-	input:       ^InputState,
-	dt:          f64,
-	completion:  ^sync.Sema,
-	should_quit: ^bool,
-}
 
-VariableUpdateData :: struct {
-	world:      ^World,
-	dt:         f32,
-	completion: ^sync.Sema,
+JobSystem :: struct {
+	workers:         [dynamic]^thread.Thread,
+	contexts:        [dynamic]^WorkerContext,
+	job_queue:       queue.Queue(Job),
+	queue_mutex:     sync.Mutex,
+	queue_semaphore: sync.Sema,
+	is_running:      bool,
 }
-
 
 Job :: struct {
 	procedure:     proc(data: rawptr),
@@ -35,15 +29,19 @@ WorkerContext :: struct {
 	is_running: ^bool,
 }
 
-JobSystem :: struct {
-	workers:         [dynamic]^thread.Thread,
-	contexts:        [dynamic]^WorkerContext,
-	job_queue:       queue.Queue(Job),
-	queue_mutex:     sync.Mutex,
-	queue_semaphore: sync.Sema,
-	is_running:      bool,
+FixedUpdateData :: struct {
+	world:       ^World,
+	input:       ^InputState,
+	dt:          f64,
+	completion:  ^sync.Sema,
+	should_quit: ^bool,
 }
 
+VariableUpdateData :: struct {
+	world:      ^World,
+	dt:         f32,
+	completion: ^sync.Sema,
+}
 
 create_job_system :: proc(num_threads := 4) -> ^JobSystem {
 	system := new(JobSystem)
@@ -122,37 +120,17 @@ schedule_job :: proc(system: ^JobSystem, job: Job) {
 	sync.sema_post(&system.queue_semaphore)
 }
 
-// fixed_update_job :: proc(data: rawptr) {
-// 	update_data := cast(^FixedUpdateData)data
-
-// 	process_fixed_update(update_data.input)
-
-// 	if update_data.input.quit_request {
-// 		update_data.should_quit^ = true
-// 		return
-// 	}
-
-// 	systems_update(update_data.world, f32(update_data.dt))
-// }
 fixed_update_job :: proc(data: rawptr) {
-	fmt.println("Starting fixed update job")
 	update_data := cast(^FixedUpdateData)data
-	if update_data == nil {
-		fmt.println("ERROR: Nil update data")
-		return
-	}
 
 	process_fixed_update(update_data.input)
-	fmt.println("Processed fixed update")
 
 	if update_data.input.quit_request {
 		update_data.should_quit^ = true
 		return
 	}
 
-	fmt.println("Running systems...")
 	systems_update(update_data.world, f32(update_data.dt))
-	fmt.println("Fixed update job complete")
 }
 
 variable_update_job :: proc(data: rawptr) {
