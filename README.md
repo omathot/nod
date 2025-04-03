@@ -1,6 +1,9 @@
 # Nod
 Learning all the bits and pieces of game engines by making one using Odinlang
 
+*THIS PROJECT IS BEIBG REWRITTEN IN MANY DIFFERENT LANGUAGES*\
+I am prototyping different implementations and learning along the way
+
 ## Installation
 
 ### requirements
